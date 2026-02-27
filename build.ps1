@@ -44,7 +44,7 @@ if ($Installer -and -not $SelfContained) {
 
 # ── 0. Icônes placeholder ─────────────────────────────────────────────────────
 $requiredIcons = @("winback.ico","winback_tray.ico","winback_busy.ico","winback_error.ico")
-$missingIcons  = $requiredIcons | Where-Object { -not (Test-Path "$iconsDir\$_") }
+$missingIcons  = @($requiredIcons | Where-Object { -not (Test-Path "$iconsDir\$_") })
 
 if ($missingIcons.Count -gt 0) {
     Write-Host "`n→ Création des icônes placeholder…" -ForegroundColor Yellow

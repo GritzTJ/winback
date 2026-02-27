@@ -19,8 +19,7 @@ public class NotificationService
     public void NotifyDriveDetected(string profileName)
     {
         ShowBalloon("WinBack — Disque détecté",
-            $"Sauvegarde de « {profileName} » en cours…",
-            BalloonIcon.Info);
+            $"Sauvegarde de « {profileName} » en cours…");
     }
 
     public void NotifyBackupComplete(BackupRun run, string profileName)
@@ -35,34 +34,35 @@ public class NotificationService
                 ? "Aucun changement détecté."
                 : $"+{run.FilesAdded} ajouté(s)  ~{run.FilesModified} modifié(s)  -{run.FilesDeleted} supprimé(s)\n{FormatBytes(run.BytesTransferred)}{(duration.Length > 0 ? $" en {duration}" : "")}";
 
-            var icon = run.FilesErrored > 0 ? BalloonIcon.Warning : BalloonIcon.Info;
-            ShowBalloon($"WinBack — {profileName}", msg, icon);
+            var title = run.FilesErrored > 0
+                ? $"WinBack — {profileName} (avertissement)"
+                : $"WinBack — {profileName}";
+
+            ShowBalloon(title, msg);
         }
         else if (run.Status == BackupRunStatus.Error)
         {
             ShowBalloon($"WinBack — Erreur ({profileName})",
-                run.ErrorMessage ?? "Une erreur est survenue.",
-                BalloonIcon.Error);
+                run.ErrorMessage ?? "Une erreur est survenue.");
         }
     }
 
     public void NotifyNewDrive(string driveLabel, string drivePath)
     {
         ShowBalloon("WinBack — Nouveau disque",
-            $"Disque « {driveLabel} » ({drivePath}) détecté.\nCliquez pour configurer une sauvegarde.",
-            BalloonIcon.Info);
+            $"Disque « {driveLabel} » ({drivePath}) détecté.\nCliquez pour configurer une sauvegarde.");
     }
 
     public void NotifyError(string message)
     {
-        ShowBalloon("WinBack — Erreur", message, BalloonIcon.Error);
+        ShowBalloon("WinBack — Erreur", message);
     }
 
-    private void ShowBalloon(string title, string message, BalloonIcon icon)
+    private void ShowBalloon(string title, string message)
     {
         if (_trayIcon == null) return;
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            _trayIcon.ShowBalloonTip(title, message, icon));
+            _trayIcon.ShowBalloonTip(title, message));
     }
 
     private static string FormatBytes(long bytes)

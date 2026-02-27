@@ -1,4 +1,5 @@
 using H.NotifyIcon;
+using H.NotifyIcon.Wpf;
 using WinBack.Core.Models;
 
 namespace WinBack.App.Services;
@@ -62,7 +63,7 @@ public class NotificationService
     {
         if (_trayIcon == null) return;
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            _trayIcon.ShowBalloonTip(title, message));
+            _trayIcon.ShowBalloonTip(title, message, BalloonIcon.None));
     }
 
     private static string FormatBytes(long bytes)

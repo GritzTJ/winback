@@ -65,7 +65,7 @@ if ($LASTEXITCODE -ne 0) { throw "Restauration échouée" }
 
 # ── 3. Compilation ────────────────────────────────────────────────────────────
 Write-Host "`n→ Compilation Release x64…" -ForegroundColor Yellow
-dotnet build "$root\WinBack.sln" -c Release -a x64 --nologo /v:m
+dotnet build "$root\WinBack.sln" -c Release --nologo /v:m
 if ($LASTEXITCODE -ne 0) { throw "Compilation échouée" }
 
 # ── 4. Publication ────────────────────────────────────────────────────────────

@@ -1,0 +1,73 @@
+name: CI / Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # ── Build ────────────────────────────────────────────────────────────────────
+  build:
+    name: Build installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Cache Inno Setup pour éviter de le retélécharger à chaque build
+      - name: Cache Inno Setup
+        uses: actions/cache@v4
+        with:
+          path: .tools/innosetup
+          key: innosetup-6.3.3
+
+      - name: Create placeholder icons
+        shell: pwsh
+        run: WinBack.App/Resources/Icons/create_placeholder_icons.ps1
+
+      - name: Build installer
+        shell: pwsh
+        run: ./build.ps1 -Installer
+
+      # Conserve le Setup.exe comme artefact (accessible dans l'onglet Actions)
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinBack-Setup
+          path: installer/output/WinBack-*.exe
+          retention-days: 7
+
+  # ── Release ──────────────────────────────────────────────────────────────────
+  # Ne tourne que lors d'un push de tag vX.Y.Z
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: WinBack-Setup
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/WinBack-*.exe
+          generate_release_notes: true
+          draft: false
+          # Tag contenant un tiret (ex: v1.0.0-beta) → pré-release automatique
+          prerelease: ${{ contains(github.ref_name, '-') }}

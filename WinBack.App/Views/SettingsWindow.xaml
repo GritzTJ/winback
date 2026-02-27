@@ -1,0 +1,160 @@
+<Window x:Class="WinBack.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:WinBack.App.Converters"
+        Title="WinBack — Paramètres"
+        Width="500" SizeToContent="Height"
+        MinWidth="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Style="{StaticResource MainWindowStyle}"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="56"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <TextBlock Text="Paramètres" Style="{StaticResource TextTitle}"
+                       VerticalAlignment="Center" Margin="20,0"/>
+        </Border>
+
+        <!-- Contenu -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20" Spacing="16">
+
+                <!-- ── Général ─────────────────────────────────────────────── -->
+                <TextBlock Text="Général" Style="{StaticResource TextSubtitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="14">
+                        <CheckBox Content="Démarrer WinBack automatiquement avec Windows"
+                                  IsChecked="{Binding StartWithWindows}"
+                                  Style="{StaticResource CheckBoxStyle}"/>
+                        <CheckBox Content="Afficher les notifications Windows après chaque sauvegarde"
+                                  IsChecked="{Binding ShowNotifications}"
+                                  Style="{StaticResource CheckBoxStyle}"/>
+                        <CheckBox Content="Démarrer réduit dans la barre système"
+                                  IsChecked="{Binding StartMinimized}"
+                                  Style="{StaticResource CheckBoxStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Affichage ──────────────────────────────────────────── -->
+                <TextBlock Text="Affichage" Style="{StaticResource TextSubtitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="14">
+                        <CheckBox IsChecked="{Binding AdvancedMode}"
+                                  Style="{StaticResource CheckBoxStyle}">
+                            <StackPanel>
+                                <TextBlock Text="Mode avancé" Style="{StaticResource TextBody}"/>
+                                <TextBlock Text="Affiche les UUID des disques, les options techniques et les logs détaillés."
+                                           Style="{StaticResource TextCaption}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </CheckBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Journalisation (mode avancé) ─────────────────────── -->
+                <StackPanel Spacing="12"
+                            Visibility="{Binding AdvancedMode, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="Journalisation" Style="{StaticResource TextSubtitle}"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Niveau de log" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <ComboBox SelectedIndex="{Binding LogLevel}"
+                                          FontFamily="Segoe UI Variable Text, Segoe UI"
+                                          FontSize="13">
+                                    <ComboBoxItem Content="0 — Désactivé"/>
+                                    <ComboBoxItem Content="1 — Erreurs uniquement"/>
+                                    <ComboBoxItem Content="2 — Avertissements"/>
+                                    <ComboBoxItem Content="3 — Informations (recommandé)"/>
+                                    <ComboBoxItem Content="4 — Débogage (verbeux)"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Dossier des logs" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding LogDirectory, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource TextBoxStyle}" IsReadOnly="True"/>
+                                    <Button Grid.Column="1" Content="…"
+                                            Style="{StaticResource ButtonSecondary}"
+                                            Margin="8,0,0,0" Width="36"
+                                            Command="{Binding BrowseLogDirectoryCommand}"/>
+                                    <Button Grid.Column="2" Content="Ouvrir"
+                                            Style="{StaticResource ButtonIcon}"
+                                            Margin="6,0,0,0"
+                                            Command="{Binding OpenLogDirectoryCommand}"/>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ── À propos ──────────────────────────────────────────── -->
+                <TextBlock Text="À propos" Style="{StaticResource TextSubtitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <TextBlock Text="Version" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding AppVersion}" HorizontalAlignment="Right"
+                                       Style="{StaticResource TextBody}"/>
+                        </Grid>
+                        <Separator Style="{StaticResource SeparatorStyle}"/>
+                        <Grid>
+                            <TextBlock Text="Base de données" Style="{StaticResource TextCaption}" FontWeight="SemiBold"
+                                       Visibility="{Binding AdvancedMode, Converter={StaticResource BoolVis}}"/>
+                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8"
+                                        Visibility="{Binding AdvancedMode, Converter={StaticResource BoolVis}}">
+                                <TextBlock Text="{Binding DatabasePath}"
+                                           Style="{StaticResource TextCaption}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center"
+                                           MaxWidth="220" TextTrimming="CharacterEllipsis"/>
+                                <Button Content="Ouvrir" Style="{StaticResource ButtonIcon}"
+                                        Command="{Binding OpenDatabaseFolderCommand}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Message de statut -->
+                <TextBlock Text="{Binding StatusMessage}"
+                           Style="{StaticResource TextCaption}"
+                           Foreground="{StaticResource AccentBrush}"
+                           Visibility="{Binding StatusMessage, Converter={StaticResource BoolVis}}"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Actions bas -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+                Padding="20,12">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                <Button Content="Annuler" Style="{StaticResource ButtonSecondary}"
+                        Click="Cancel_Click"/>
+                <Button Content="Enregistrer" Style="{StaticResource ButtonPrimary}"
+                        Command="{Binding SaveCommand}"
+                        Click="Save_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

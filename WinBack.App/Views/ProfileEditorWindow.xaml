@@ -1,0 +1,356 @@
+<Window x:Class="WinBack.App.Views.ProfileEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WinBack.App.ViewModels"
+        xmlns:conv="clr-namespace:WinBack.App.Converters"
+        xmlns:models="clr-namespace:WinBack.Core.Models;assembly=WinBack.Core"
+        Title="WinBack — Configurer un disque"
+        Width="560" SizeToContent="Height"
+        MinWidth="480"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Style="{StaticResource MainWindowStyle}">
+
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
+        <conv:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
+        <conv:StrategyToBoolConverter x:Key="StrategyBool"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="56"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── En-tête ─────────────────────────────────────────────────────── -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="20,0">
+                <!-- TitleBlock est mis à jour depuis le code-behind selon le mode création/édition -->
+                <TextBlock x:Name="TitleBlock" Style="{StaticResource TextTitle}"
+                           Text="Configurer un disque" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ── Indicateur d'étapes ────────────────────────────────────────── -->
+        <Border Grid.Row="1" Background="{StaticResource SurfaceAltBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="20,10"
+                Visibility="{Binding IsEditMode, Converter={StaticResource InvBoolVis}}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="0">
+                <StackPanel.Resources>
+                    <Style x:Key="StepCircle" TargetType="Border">
+                        <Setter Property="Width" Value="28"/>
+                        <Setter Property="Height" Value="28"/>
+                        <Setter Property="CornerRadius" Value="14"/>
+                        <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
+                    </Style>
+                </StackPanel.Resources>
+
+                <!-- Étape 1 -->
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Style="{StaticResource StepCircle}">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStep1}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="1" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" Foreground="White"/>
+                    </Border>
+                    <TextBlock Text="Nom du disque" Style="{StaticResource TextCaption}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="──" Foreground="{StaticResource BorderBrush}" VerticalAlignment="Center" Margin="8,0"/>
+
+                <!-- Étape 2 -->
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Style="{StaticResource StepCircle}">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStep2}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="2" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" Foreground="White"/>
+                    </Border>
+                    <TextBlock Text="Dossiers" Style="{StaticResource TextCaption}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="──" Foreground="{StaticResource BorderBrush}" VerticalAlignment="Center" Margin="8,0"/>
+
+                <!-- Étape 3 -->
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Style="{StaticResource StepCircle}">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStep3}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="3" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" Foreground="White"/>
+                    </Border>
+                    <TextBlock Text="Options" Style="{StaticResource TextCaption}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="──" Foreground="{StaticResource BorderBrush}" VerticalAlignment="Center" Margin="8,0"/>
+
+                <!-- Étape 4 -->
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Style="{StaticResource StepCircle}">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStep4}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="4" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" Foreground="White"/>
+                    </Border>
+                    <TextBlock Text="Récapitulatif" Style="{StaticResource TextCaption}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ── Contenu des étapes ─────────────────────────────────────────── -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="24">
+
+                <!-- ═ Étape 1 : Identification ═ -->
+                <StackPanel Visibility="{Binding IsStep1, Converter={StaticResource BoolVis}}" Spacing="16">
+                    <TextBlock Text="Nommer le disque" Style="{StaticResource TextSubtitle}"/>
+                    <TextBlock Style="{StaticResource TextBody}" Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="Donnez un nom que vous reconnaîtrez facilement, par exemple « SSD Samsung Papa »."/>
+
+                    <!-- Disque détecté -->
+                    <Border Style="{StaticResource Card}" Background="#F0F7FF"
+                            Visibility="{Binding DetectedDriveLabel, Converter={StaticResource NullVis}}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Disque détecté" Style="{StaticResource TextCaption}"
+                                       Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock FontWeight="SemiBold" FontSize="13">
+                                <Run Text="{Binding DetectedDriveLabel}"/>
+                                <Run Text=" ("/>
+                                <Run Text="{Binding DetectedDriveLetter}"/>
+                                <Run Text=":)"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Nom du disque" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding ProfileName, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource TextBoxStyle}"
+                                 x:Name="ProfileNameBox"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ═ Étape 2 : Dossiers à sauvegarder ═ -->
+                <StackPanel Visibility="{Binding IsStep2, Converter={StaticResource BoolVis}}" Spacing="16">
+                    <TextBlock Text="Dossiers à sauvegarder" Style="{StaticResource TextSubtitle}"/>
+                    <TextBlock Style="{StaticResource TextBody}" Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="Choisissez les dossiers à sauvegarder et où les ranger sur le disque."/>
+
+                    <!-- Liste des paires -->
+                    <ItemsControl ItemsSource="{Binding Pairs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:PairRowViewModel}">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="10">
+                                            <!-- Source -->
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="Dossier source" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox Grid.Column="0"
+                                                             Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
+                                                             Style="{StaticResource TextBoxStyle}"
+                                                             IsReadOnly="True"/>
+                                                    <Button Grid.Column="1" Content="Parcourir…"
+                                                            Style="{StaticResource ButtonSecondary}"
+                                                            Margin="8,0,0,0"
+                                                            Tag="{Binding}"
+                                                            Click="BrowseSource_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+                                            <!-- Destination -->
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="Dossier sur le disque (relatif à la racine)"
+                                                           Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding DestRelativePath, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource TextBoxStyle}"
+                                                         PlaceholderText="ex: Sauvegardes\Documents"/>
+                                            </StackPanel>
+                                            <!-- Exclusions -->
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="Exclusions (séparées par ;)"
+                                                           Style="{StaticResource TextCaption}"/>
+                                                <TextBox Text="{Binding ExcludePatterns, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource TextBoxStyle}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <!-- Bouton supprimer la paire -->
+                                        <Button Grid.Column="1" Content="🗑"
+                                                Style="{StaticResource ButtonIcon}"
+                                                VerticalAlignment="Top" Margin="8,0,0,0"
+                                                Tag="{Binding}"
+                                                Click="RemovePair_Click"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Button Content="+ Ajouter un dossier" Style="{StaticResource ButtonSecondary}"
+                            HorizontalAlignment="Left"
+                            Command="{Binding AddPairCommand}"/>
+                </StackPanel>
+
+                <!-- ═ Étape 3 : Options ═ -->
+                <StackPanel Visibility="{Binding IsStep3, Converter={StaticResource BoolVis}}" Spacing="16">
+                    <TextBlock Text="Options de sauvegarde" Style="{StaticResource TextSubtitle}"/>
+
+                    <!-- Stratégie de suppression -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Que faire des fichiers supprimés ?"
+                                       Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+
+                            <RadioButton Content="Miroir strict — supprimer aussi sur le disque (recommandé)"
+                                         GroupName="strategy" Style="{StaticResource CheckBoxStyle}"
+                                         IsChecked="{Binding SelectedStrategy,
+                                             Converter={StaticResource StrategyBool}, ConverterParameter=Mirror}"/>
+                            <RadioButton Content="Corbeille de sauvegarde — déplacer dans un dossier caché"
+                                         GroupName="strategy" Style="{StaticResource CheckBoxStyle}"
+                                         IsChecked="{Binding SelectedStrategy,
+                                             Converter={StaticResource StrategyBool}, ConverterParameter=RecycleBin}"/>
+                            <RadioButton Content="Accumulation — ne jamais supprimer"
+                                         GroupName="strategy" Style="{StaticResource CheckBoxStyle}"
+                                         IsChecked="{Binding SelectedStrategy,
+                                             Converter={StaticResource StrategyBool}, ConverterParameter=Additive}"/>
+
+                            <!-- Rétention : visible uniquement en mode Corbeille -->
+                            <StackPanel Orientation="Horizontal" Spacing="10"
+                                        Visibility="{Binding IsRecycleBinStrategy, Converter={StaticResource BoolVis}}">
+                                <TextBlock Text="Conserver pendant :" Style="{StaticResource TextBody}"
+                                           VerticalAlignment="Center"/>
+                                <TextBox Width="60" Style="{StaticResource TextBoxStyle}"
+                                         Text="{Binding RetentionDays}" TextAlignment="Center"/>
+                                <TextBlock Text="jours" Style="{StaticResource TextBody}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Comportement -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Comportement" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+
+                            <CheckBox Content="Démarrer la sauvegarde automatiquement à la connexion"
+                                      IsChecked="{Binding AutoStart}"
+                                      Style="{StaticResource CheckBoxStyle}"/>
+                            <CheckBox Content="Utiliser VSS pour les fichiers ouverts (Outlook, bases de données)"
+                                      IsChecked="{Binding EnableVss}"
+                                      Style="{StaticResource CheckBoxStyle}"/>
+                            <CheckBox Content="Vérifier l'intégrité par hash après copie (plus lent)"
+                                      IsChecked="{Binding EnableHashVerification}"
+                                      Style="{StaticResource CheckBoxStyle}"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="Délai avant démarrage :" Style="{StaticResource TextBody}"
+                                           VerticalAlignment="Center"/>
+                                <TextBox Width="60" Style="{StaticResource TextBoxStyle}"
+                                         Text="{Binding InsertionDelaySeconds}" TextAlignment="Center"/>
+                                <TextBlock Text="secondes" Style="{StaticResource TextBody}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ═ Étape 4 : Récapitulatif ═ -->
+                <StackPanel Visibility="{Binding IsStep4, Converter={StaticResource BoolVis}}" Spacing="16">
+                    <TextBlock Text="Récapitulatif" Style="{StaticResource TextSubtitle}"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="12">
+                            <Grid>
+                                <TextBlock Text="Nom" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <TextBlock HorizontalAlignment="Right" Text="{Binding ProfileName}"
+                                           Style="{StaticResource TextBody}"/>
+                            </Grid>
+                            <Separator Style="{StaticResource SeparatorStyle}"/>
+                            <Grid>
+                                <TextBlock Text="Dossiers" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource TextBody}">
+                                    <Run Text="{Binding Pairs.Count}"/>
+                                    <Run Text=" dossier(s)"/>
+                                </TextBlock>
+                            </Grid>
+                            <Separator Style="{StaticResource SeparatorStyle}"/>
+                            <Grid>
+                                <TextBlock Text="Stratégie" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <TextBlock HorizontalAlignment="Right" Text="{Binding SelectedStrategy}"
+                                           Style="{StaticResource TextBody}"/>
+                            </Grid>
+                            <Separator Style="{StaticResource SeparatorStyle}"/>
+                            <Grid>
+                                <TextBlock Text="Démarrage auto" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource TextBody}">
+                                    <Run Text="{Binding AutoStart}"/>
+                                </TextBlock>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                               Style="{StaticResource TextCaption}"
+                               TextWrapping="Wrap"
+                               Text="La première sauvegarde copiera tous les fichiers. Les suivantes ne copieront que les nouveaux fichiers et ceux qui ont été modifiés."/>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── Navigation bas ────────────────────────────────────────────── -->
+        <Border Grid.Row="3" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+                Padding="20,12">
+            <Grid>
+                <Button Content="← Retour" Style="{StaticResource ButtonSecondary}"
+                        HorizontalAlignment="Left"
+                        Command="{Binding PreviousStepCommand}"
+                        Visibility="{Binding CanGoBack, Converter={StaticResource BoolVis}}"/>
+
+                <Button Content="{Binding NextButtonText}"
+                        Style="{StaticResource ButtonPrimary}"
+                        HorizontalAlignment="Right"
+                        Command="{Binding NextStepCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InvBoolVis}}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

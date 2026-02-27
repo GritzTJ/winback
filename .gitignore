@@ -1,0 +1,52 @@
+## .NET / C#
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+
+## NuGet
+packages/
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+
+## Build tools
+*.ncb
+*.sln.docstates
+*.vcxproj.filters
+
+## Rider / JetBrains
+.idea/
+*.DotSettings.user
+
+## VS Code
+.vscode/
+!.vscode/extensions.json
+
+## Icônes placeholder (générées localement, ne pas committer)
+WinBack.App/Resources/Icons/winback.ico
+WinBack.App/Resources/Icons/winback_tray.ico
+WinBack.App/Resources/Icons/winback_busy.ico
+WinBack.App/Resources/Icons/winback_error.ico
+
+## Base de données locale (développement)
+*.db
+*.db-shm
+*.db-wal
+
+## Installateur (fichiers générés)
+installer/output/
+
+## Outils de build téléchargés automatiquement
+.tools/
+
+## Logs
+*.log
+Logs/
+
+## OS
+Thumbs.db
+.DS_Store
+desktop.ini

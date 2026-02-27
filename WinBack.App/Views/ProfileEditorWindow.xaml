@@ -203,7 +203,7 @@
                                                            Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
                                                 <TextBox Text="{Binding DestRelativePath, UpdateSourceTrigger=PropertyChanged}"
                                                          Style="{StaticResource TextBoxStyle}"
-                                                         PlaceholderText="ex: Sauvegardes\Documents"/>
+                                                         Tag="ex: Sauvegardes\Documents"/>
                                             </StackPanel>
                                             <!-- Exclusions -->
                                             <StackPanel ctrl:StackPanelEx.Spacing="4">

@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:WinBack.App.ViewModels"
         xmlns:conv="clr-namespace:WinBack.App.Converters"
+        xmlns:ctrl="clr-namespace:WinBack.App.Controls"
         xmlns:models="clr-namespace:WinBack.Core.Models;assembly=WinBack.Core"
         Title="WinBack — Historique des sauvegardes"
         Width="860" Height="560"
@@ -80,7 +81,7 @@
                                                FontWeight="Bold" VerticalAlignment="Center"/>
 
                                     <StackPanel Grid.Column="1" Margin="8,0">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="6">
                                             <TextBlock Text="{Binding ProfileName}"
                                                        Style="{StaticResource TextBody}" FontWeight="SemiBold"/>
                                             <Border CornerRadius="4" Padding="4,1"

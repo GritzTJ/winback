@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:WinBack.App.ViewModels"
         xmlns:conv="clr-namespace:WinBack.App.Converters"
+        xmlns:ctrl="clr-namespace:WinBack.App.Controls"
         xmlns:models="clr-namespace:WinBack.Core.Models;assembly=WinBack.Core"
         Title="WinBack — Configurer un disque"
         Width="560" SizeToContent="Height"
@@ -40,7 +41,7 @@
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
                 Padding="20,10"
                 Visibility="{Binding IsEditMode, Converter={StaticResource InvBoolVis}}">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" ctrl:StackPanelEx.Spacing="0">
                 <StackPanel.Resources>
                     <Style x:Key="StepCircle" TargetType="Border">
                         <Setter Property="Width" Value="28"/>
@@ -51,7 +52,7 @@
                 </StackPanel.Resources>
 
                 <!-- Étape 1 -->
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="6">
                     <Border Style="{StaticResource StepCircle}">
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
@@ -70,7 +71,7 @@
                 <TextBlock Text="──" Foreground="{StaticResource BorderBrush}" VerticalAlignment="Center" Margin="8,0"/>
 
                 <!-- Étape 2 -->
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="6">
                     <Border Style="{StaticResource StepCircle}">
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
@@ -89,7 +90,7 @@
                 <TextBlock Text="──" Foreground="{StaticResource BorderBrush}" VerticalAlignment="Center" Margin="8,0"/>
 
                 <!-- Étape 3 -->
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="6">
                     <Border Style="{StaticResource StepCircle}">
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
@@ -108,7 +109,7 @@
                 <TextBlock Text="──" Foreground="{StaticResource BorderBrush}" VerticalAlignment="Center" Margin="8,0"/>
 
                 <!-- Étape 4 -->
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="6">
                     <Border Style="{StaticResource StepCircle}">
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
@@ -132,7 +133,7 @@
             <StackPanel Margin="24">
 
                 <!-- ═ Étape 1 : Identification ═ -->
-                <StackPanel Visibility="{Binding IsStep1, Converter={StaticResource BoolVis}}" Spacing="16">
+                <StackPanel Visibility="{Binding IsStep1, Converter={StaticResource BoolVis}}" ctrl:StackPanelEx.Spacing="16">
                     <TextBlock Text="Nommer le disque" Style="{StaticResource TextSubtitle}"/>
                     <TextBlock Style="{StaticResource TextBody}" Foreground="{StaticResource TextSecondaryBrush}"
                                Text="Donnez un nom que vous reconnaîtrez facilement, par exemple « SSD Samsung Papa »."/>
@@ -140,7 +141,7 @@
                     <!-- Disque détecté -->
                     <Border Style="{StaticResource Card}" Background="#F0F7FF"
                             Visibility="{Binding DetectedDriveLabel, Converter={StaticResource NullVis}}">
-                        <StackPanel Spacing="4">
+                        <StackPanel ctrl:StackPanelEx.Spacing="4">
                             <TextBlock Text="Disque détecté" Style="{StaticResource TextCaption}"
                                        Foreground="{StaticResource AccentBrush}"/>
                             <TextBlock FontWeight="SemiBold" FontSize="13">
@@ -152,7 +153,7 @@
                         </StackPanel>
                     </Border>
 
-                    <StackPanel Spacing="6">
+                    <StackPanel ctrl:StackPanelEx.Spacing="6">
                         <TextBlock Text="Nom du disque" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
                         <TextBox Text="{Binding ProfileName, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource TextBoxStyle}"
@@ -161,7 +162,7 @@
                 </StackPanel>
 
                 <!-- ═ Étape 2 : Dossiers à sauvegarder ═ -->
-                <StackPanel Visibility="{Binding IsStep2, Converter={StaticResource BoolVis}}" Spacing="16">
+                <StackPanel Visibility="{Binding IsStep2, Converter={StaticResource BoolVis}}" ctrl:StackPanelEx.Spacing="16">
                     <TextBlock Text="Dossiers à sauvegarder" Style="{StaticResource TextSubtitle}"/>
                     <TextBlock Style="{StaticResource TextBody}" Foreground="{StaticResource TextSecondaryBrush}"
                                Text="Choisissez les dossiers à sauvegarder et où les ranger sur le disque."/>
@@ -176,9 +177,9 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="10">
+                                        <StackPanel Grid.Column="0" ctrl:StackPanelEx.Spacing="10">
                                             <!-- Source -->
-                                            <StackPanel Spacing="4">
+                                            <StackPanel ctrl:StackPanelEx.Spacing="4">
                                                 <TextBlock Text="Dossier source" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -197,7 +198,7 @@
                                                 </Grid>
                                             </StackPanel>
                                             <!-- Destination -->
-                                            <StackPanel Spacing="4">
+                                            <StackPanel ctrl:StackPanelEx.Spacing="4">
                                                 <TextBlock Text="Dossier sur le disque (relatif à la racine)"
                                                            Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
                                                 <TextBox Text="{Binding DestRelativePath, UpdateSourceTrigger=PropertyChanged}"
@@ -205,7 +206,7 @@
                                                          PlaceholderText="ex: Sauvegardes\Documents"/>
                                             </StackPanel>
                                             <!-- Exclusions -->
-                                            <StackPanel Spacing="4">
+                                            <StackPanel ctrl:StackPanelEx.Spacing="4">
                                                 <TextBlock Text="Exclusions (séparées par ;)"
                                                            Style="{StaticResource TextCaption}"/>
                                                 <TextBox Text="{Binding ExcludePatterns, UpdateSourceTrigger=PropertyChanged}"
@@ -231,12 +232,12 @@
                 </StackPanel>
 
                 <!-- ═ Étape 3 : Options ═ -->
-                <StackPanel Visibility="{Binding IsStep3, Converter={StaticResource BoolVis}}" Spacing="16">
+                <StackPanel Visibility="{Binding IsStep3, Converter={StaticResource BoolVis}}" ctrl:StackPanelEx.Spacing="16">
                     <TextBlock Text="Options de sauvegarde" Style="{StaticResource TextSubtitle}"/>
 
                     <!-- Stratégie de suppression -->
                     <Border Style="{StaticResource Card}">
-                        <StackPanel Spacing="12">
+                        <StackPanel ctrl:StackPanelEx.Spacing="12">
                             <TextBlock Text="Que faire des fichiers supprimés ?"
                                        Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
 
@@ -254,7 +255,7 @@
                                              Converter={StaticResource StrategyBool}, ConverterParameter=Additive}"/>
 
                             <!-- Rétention : visible uniquement en mode Corbeille -->
-                            <StackPanel Orientation="Horizontal" Spacing="10"
+                            <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="10"
                                         Visibility="{Binding IsRecycleBinStrategy, Converter={StaticResource BoolVis}}">
                                 <TextBlock Text="Conserver pendant :" Style="{StaticResource TextBody}"
                                            VerticalAlignment="Center"/>
@@ -267,7 +268,7 @@
 
                     <!-- Comportement -->
                     <Border Style="{StaticResource Card}">
-                        <StackPanel Spacing="10">
+                        <StackPanel ctrl:StackPanelEx.Spacing="10">
                             <TextBlock Text="Comportement" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
 
                             <CheckBox Content="Démarrer la sauvegarde automatiquement à la connexion"
@@ -280,7 +281,7 @@
                                       IsChecked="{Binding EnableHashVerification}"
                                       Style="{StaticResource CheckBoxStyle}"/>
 
-                            <StackPanel Orientation="Horizontal" Spacing="10">
+                            <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="10">
                                 <TextBlock Text="Délai avant démarrage :" Style="{StaticResource TextBody}"
                                            VerticalAlignment="Center"/>
                                 <TextBox Width="60" Style="{StaticResource TextBoxStyle}"
@@ -292,11 +293,11 @@
                 </StackPanel>
 
                 <!-- ═ Étape 4 : Récapitulatif ═ -->
-                <StackPanel Visibility="{Binding IsStep4, Converter={StaticResource BoolVis}}" Spacing="16">
+                <StackPanel Visibility="{Binding IsStep4, Converter={StaticResource BoolVis}}" ctrl:StackPanelEx.Spacing="16">
                     <TextBlock Text="Récapitulatif" Style="{StaticResource TextSubtitle}"/>
 
                     <Border Style="{StaticResource Card}">
-                        <StackPanel Spacing="12">
+                        <StackPanel ctrl:StackPanelEx.Spacing="12">
                             <Grid>
                                 <TextBlock Text="Nom" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
                                 <TextBlock HorizontalAlignment="Right" Text="{Binding ProfileName}"

@@ -74,7 +74,6 @@ Write-Host "`n→ Publication…" -ForegroundColor Yellow
 $publishArgs = @(
     "publish", $appProj,
     "-c", "Release",
-    "-a", "x64",
     "-o", $publish,
     "--nologo",
     "/p:PublishSingleFile=true",

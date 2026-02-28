@@ -40,7 +40,9 @@ WinBack.sln
     ├── Services/
     │   ├── UsbMonitorService    Surveillance WM_DEVICECHANGE
     │   ├── BackupOrchestrator   Coordination du cycle de sauvegarde
-    │   └── NotificationService  Notifications barre système
+    │   └── NotificationService  Notifications via Shell_NotifyIcon (P/Invoke)
+    ├── Controls/            Composants WPF réutilisables
+    │   └── StackPanelEx     Propriété attachée Spacing (équivalent WinUI)
     ├── ViewModels/          CommunityToolkit.Mvvm
     ├── Views/               WPF / XAML (thème Windows 11)
     └── Resources/           Styles, icônes
@@ -72,7 +74,7 @@ cd WinBack.App\Resources\Icons
 #### 2. Compiler
 
 ```powershell
-dotnet build WinBack.sln -c Release -a x64
+dotnet build WinBack.sln -c Release
 ```
 
 #### 3. Lancer en développement
@@ -107,7 +109,7 @@ Le script `build.ps1` génère l'exécutable et/ou l'installateur.
 
 #### Prérequis pour générer l'installateur
 
-[Inno Setup 6](https://jrsoftware.org/isinfo.php) doit être installé. Le script le détecte automatiquement.
+Aucun — si Inno Setup 6 n'est pas détecté, `build.ps1` le télécharge et l'installe automatiquement dans `.tools\innosetup\` (dossier local au projet, gitignorée).
 
 ### Installation et désinstallation
 
@@ -143,7 +145,7 @@ Elle contient les profils de sauvegarde, les snapshots d'état des fichiers (uti
 | `Microsoft.EntityFrameworkCore.Sqlite 9.x` | ORM + base de données |
 | `Microsoft.Extensions.Hosting 9.x` | DI + services hébergés |
 | `CommunityToolkit.Mvvm 8.x` | ObservableObject, RelayCommand |
-| `H.NotifyIcon.Wpf 2.x` | Icône barre système + balloon tips |
+| `H.NotifyIcon.Wpf 2.x` | Icône barre système (tray) |
 | `System.Management 9.x` | WMI (identification disques, VSS) |
 
 ### Licence
@@ -190,7 +192,9 @@ WinBack.sln
     ├── Services/
     │   ├── UsbMonitorService    WM_DEVICECHANGE monitoring
     │   ├── BackupOrchestrator   Backup lifecycle coordination
-    │   └── NotificationService  System tray notifications
+    │   └── NotificationService  Notifications via Shell_NotifyIcon (P/Invoke)
+    ├── Controls/            Reusable WPF components
+    │   └── StackPanelEx     Spacing attached property (WinUI equivalent)
     ├── ViewModels/          CommunityToolkit.Mvvm
     ├── Views/               WPF / XAML (Windows 11 theme)
     └── Resources/           Styles, icons
@@ -222,7 +226,7 @@ cd WinBack.App\Resources\Icons
 #### 2. Build
 
 ```powershell
-dotnet build WinBack.sln -c Release -a x64
+dotnet build WinBack.sln -c Release
 ```
 
 #### 3. Run in development
@@ -257,7 +261,7 @@ The `build.ps1` script produces the executable and/or the installer.
 
 #### Installer build requirement
 
-[Inno Setup 6](https://jrsoftware.org/isinfo.php) must be installed. The script detects it automatically.
+None — if Inno Setup 6 is not detected, `build.ps1` downloads and installs it automatically into `.tools\innosetup\` (local project folder, git-ignored).
 
 ### Installation and uninstallation
 
@@ -293,7 +297,7 @@ It stores backup profiles, file state snapshots (used for incremental diff compu
 | `Microsoft.EntityFrameworkCore.Sqlite 9.x` | ORM + database |
 | `Microsoft.Extensions.Hosting 9.x` | DI + hosted services |
 | `CommunityToolkit.Mvvm 8.x` | ObservableObject, RelayCommand |
-| `H.NotifyIcon.Wpf 2.x` | System tray icon + balloon tips |
+| `H.NotifyIcon.Wpf 2.x` | System tray icon |
 | `System.Management 9.x` | WMI (drive identification, VSS) |
 
 ### License

@@ -1,7 +1,7 @@
 using Microsoft.Win32;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
-using System.Windows.Data;
 using WinBack.App.ViewModels;
 using WinBack.Core.Services;
 
@@ -20,14 +20,16 @@ public partial class ProfileEditorWindow : Window
         DataContext = vm;
 
         // Fermer automatiquement après sauvegarde
-        PropertyChangedEventManager.AddHandler(vm, (s, e) =>
+        vm.PropertyChanged += OnVmPropertyChanged;
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(_vm.IsBusy) && !_vm.IsBusy && _vm.Saved)
         {
-            if (e.PropertyName == nameof(vm.IsBusy) && !vm.IsBusy && vm.Saved)
-            {
-                DialogResult = true;
-                Close();
-            }
-        }, nameof(vm.IsBusy));
+            DialogResult = true;
+            Close();
+        }
     }
 
     public void InitFromDrive(DriveDetails drive)

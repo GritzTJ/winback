@@ -6,15 +6,25 @@ using WinBack.Core.Services;
 
 namespace WinBack.App.ViewModels;
 
+/// <summary>
+/// ViewModel de la fenêtre d'historique. Charge les 100 dernières exécutions
+/// et affiche le détail (fichiers traités) d'une exécution sélectionnée.
+/// </summary>
 public partial class HistoryViewModel : ViewModelBase
 {
     private readonly ProfileService _profileService;
 
+    /// <summary>Liste paginée des exécutions (100 dernières).</summary>
     public ObservableCollection<BackupRunDetailViewModel> Runs { get; } = [];
 
+    /// <summary>Exécution actuellement sélectionnée dans la liste. Null si aucune.</summary>
     [ObservableProperty]
     private BackupRunDetailViewModel? _selectedRun;
 
+    /// <summary>
+    /// Entrées détaillées (fichier par fichier) de l'exécution sélectionnée.
+    /// Chargées à la demande via <see cref="SelectRunCommand"/>.
+    /// </summary>
     public ObservableCollection<BackupRunEntry> SelectedEntries { get; } = [];
 
     public HistoryViewModel(ProfileService profileService)
@@ -22,6 +32,7 @@ public partial class HistoryViewModel : ViewModelBase
         _profileService = profileService;
     }
 
+    /// <summary>Charge ou recharge les 100 dernières exécutions depuis la base de données.</summary>
     [RelayCommand]
     public async Task LoadAsync()
     {
@@ -36,6 +47,10 @@ public partial class HistoryViewModel : ViewModelBase
         finally { SetBusy(false); }
     }
 
+    /// <summary>
+    /// Sélectionne une exécution et charge ses entrées détaillées.
+    /// Passer null vide la sélection.
+    /// </summary>
     [RelayCommand]
     private async Task SelectRunAsync(BackupRunDetailViewModel? run)
     {
@@ -49,6 +64,10 @@ public partial class HistoryViewModel : ViewModelBase
     }
 }
 
+/// <summary>
+/// Représente une exécution de sauvegarde avec ses métriques formatées pour l'affichage.
+/// Données en lecture seule, calculées à la construction.
+/// </summary>
 public class BackupRunDetailViewModel
 {
     public int RunId { get; }
@@ -58,30 +77,34 @@ public class BackupRunDetailViewModel
     public string SummaryText { get; }
     public string SizeText { get; }
     public BackupRunStatus Status { get; }
+
+    /// <summary>Vrai si l'exécution était une simulation (dry run) sans écriture réelle.</summary>
     public bool IsDryRun { get; }
 
+    /// <summary>Icône Unicode représentant le statut de l'exécution.</summary>
     public string StatusIcon => Status switch
     {
-        BackupRunStatus.Success => "✓",
+        BackupRunStatus.Success        => "✓",
         BackupRunStatus.PartialSuccess => "⚠",
-        BackupRunStatus.Error => "✗",
-        BackupRunStatus.Cancelled => "—",
-        BackupRunStatus.Running => "…",
-        _ => "?"
+        BackupRunStatus.Error          => "✗",
+        BackupRunStatus.Cancelled      => "—",
+        BackupRunStatus.Running        => "…",
+        _                              => "?"
     };
 
     public BackupRunDetailViewModel(BackupRun run)
     {
-        RunId = run.Id;
+        RunId       = run.Id;
         ProfileName = run.Profile?.Name ?? "Profil inconnu";
-        DateText = run.StartedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss");
-        IsDryRun = run.IsDryRun;
-        Status = run.Status;
+        DateText    = run.StartedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss");
+        IsDryRun    = run.IsDryRun;
+        Status      = run.Status;
 
         DurationText = run.Duration.HasValue
             ? FormatDuration(run.Duration.Value)
             : run.Status == BackupRunStatus.Running ? "En cours…" : "—";
 
+        // Résumé condensé : +ajoutés ~modifiés -supprimés (⚠erreurs si présentes)
         SummaryText = run.TotalFiles == 0 && run.Status == BackupRunStatus.Success
             ? "Aucun changement"
             : $"+{run.FilesAdded}  ~{run.FilesModified}  -{run.FilesDeleted}" +
@@ -99,10 +122,10 @@ public class BackupRunDetailViewModel
 
     private static string FormatBytes(long bytes) => bytes switch
     {
-        0 => "0 o",
-        < 1024 => $"{bytes} o",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} Ko",
-        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} Mo",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):F2} Go"
+        0                        => "0 o",
+        < 1024                   => $"{bytes} o",
+        < 1024 * 1024            => $"{bytes / 1024.0:F1} Ko",
+        < 1024L * 1024 * 1024    => $"{bytes / (1024.0 * 1024):F1} Mo",
+        _                        => $"{bytes / (1024.0 * 1024 * 1024):F2} Go"
     };
 }

@@ -100,28 +100,37 @@ public partial class DashboardViewModel : ViewModelBase
     /// <summary>
     /// Appelé par l'orchestrateur quand une sauvegarde se termine.
     /// Met à jour le statut de la carte et rafraîchit l'historique récent.
+    /// Le gestionnaire est <c>async void</c> (imposé par la signature de l'événement) :
+    /// toute exception y est attrapée localement pour éviter un crash silencieux du processus.
     /// </summary>
     private async void OnBackupCompleted(object? sender, BackupCompletedEventArgs e)
     {
-        var card = Profiles.FirstOrDefault(p => p.ProfileId == e.Profile.Id);
-        if (card != null)
+        try
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            var card = Profiles.FirstOrDefault(p => p.ProfileId == e.Profile.Id);
+            if (card != null)
             {
-                card.IsRunning = false;
-                card.LastRunStatus = e.Run.Status;
-                card.LastRunDate = e.Run.FinishedAt;
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    card.IsRunning = false;
+                    card.LastRunStatus = e.Run.Status;
+                    card.LastRunDate = e.Run.FinishedAt;
+                });
+            }
+
+            // Rafraîchir la liste des exécutions récentes sur le thread UI
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                var runs = await _profileService.GetRecentRunsAsync(10);
+                RecentRuns.Clear();
+                foreach (var r in runs)
+                    RecentRuns.Add(new RecentRunViewModel(r));
             });
         }
-
-        // Rafraîchir la liste des exécutions récentes sur le thread UI
-        await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+        catch (Exception ex)
         {
-            var runs = await _profileService.GetRecentRunsAsync(10);
-            RecentRuns.Clear();
-            foreach (var r in runs)
-                RecentRuns.Add(new RecentRunViewModel(r));
-        });
+            System.Diagnostics.Debug.WriteLine($"[DashboardViewModel] OnBackupCompleted : {ex}");
+        }
     }
 }
 

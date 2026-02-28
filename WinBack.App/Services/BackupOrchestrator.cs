@@ -68,6 +68,10 @@ public class BackupOrchestrator
     /// </summary>
     public async Task StartBackupAsync(BackupProfile profile, DriveDetails drive, bool dryRun = false)
     {
+        // Le CTS est capturé dans une variable locale avant de relâcher le verrou
+        // pour éviter la race condition avec CancelBackupAsync.
+        CancellationTokenSource? cts = null;
+
         await _lock.WaitAsync();
         try
         {
@@ -77,7 +81,7 @@ public class BackupOrchestrator
                 return;
             }
 
-            var cts = new CancellationTokenSource();
+            cts = new CancellationTokenSource();
             _activeTasks[profile.Id] = cts;
         }
         finally
@@ -85,8 +89,7 @@ public class BackupOrchestrator
             _lock.Release();
         }
 
-        var cts2 = _activeTasks[profile.Id];
-
+        // Si on arrive ici, cts est forcément non-null (le return ci-dessus l'aurait stoppé).
         try
         {
             _notifications.NotifyDriveDetected(profile.Name);
@@ -94,7 +97,7 @@ public class BackupOrchestrator
 
             // Délai configurable avant démarrage (laisser le disque s'initialiser)
             if (profile.InsertionDelaySeconds > 0)
-                await Task.Delay(TimeSpan.FromSeconds(profile.InsertionDelaySeconds), cts2.Token);
+                await Task.Delay(TimeSpan.FromSeconds(profile.InsertionDelaySeconds), cts!.Token);
 
             var destRoot = drive.DriveLetter + ":\\";
             var progress = new Progress<BackupProgress>(p =>
@@ -103,7 +106,7 @@ public class BackupOrchestrator
                     requiresConfirmation: false) { Progress = p });
             });
 
-            var run = await _engine.RunAsync(profile, destRoot, progress, dryRun, cts2.Token);
+            var run = await _engine.RunAsync(profile, destRoot, progress, dryRun, cts!.Token);
 
             _notifications.NotifyBackupComplete(run, profile.Name);
             BackupCompleted?.Invoke(this, new BackupCompletedEventArgs(profile, run));
@@ -122,6 +125,7 @@ public class BackupOrchestrator
             await _lock.WaitAsync();
             _activeTasks.Remove(profile.Id);
             _lock.Release();
+            cts?.Dispose();
         }
     }
 

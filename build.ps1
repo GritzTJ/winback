@@ -178,7 +178,7 @@ if ($Installer) {
     & $iscc $issFile
     if ($LASTEXITCODE -ne 0) { throw "Compilation de l'installateur échouée" }
 
-    $setupPath = "$root\installer\output\WinBack-0.1.0-Setup.exe"
+    $setupPath = "$root\installer\output\WinBack-0.1.1-Setup.exe"
     if (Test-Path $setupPath) {
         $setupSize = (Get-Item $setupPath).Length / 1MB
         Write-Host "`n✓ Installateur généré !" -ForegroundColor Green

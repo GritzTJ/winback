@@ -1,7 +1,7 @@
 ; ============================================================================
 ;  WinBack — Script d'installation Inno Setup 6
 ;  Application : sauvegarde incrémentielle automatique sur disques externes
-;  Version     : 0.1.0
+;  Version     : 0.1.1
 ;
 ;  Prérequis de compilation :
 ;    1. Inno Setup 6.x  (https://jrsoftware.org/isinfo.php)
@@ -9,7 +9,7 @@
 ; ============================================================================
 
 #define MyAppName      "WinBack"
-#define MyAppVersion   "0.1.0"
+#define MyAppVersion   "0.1.1"
 #define MyAppPublisher "WinBack Contributors"
 #define MyAppExeName   "WinBack.exe"
 #define MyAppExeSrc    "..\publish\WinBack.exe"

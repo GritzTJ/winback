@@ -97,7 +97,7 @@ Le script `build.ps1` génère l'exécutable et/ou l'installateur.
 |---|---|---|---|
 | `.\build.ps1` | `publish\WinBack.exe` | ~15–20 Mo | .NET 9 Runtime installé |
 | `.\build.ps1 -SelfContained` | `publish\WinBack.exe` | ~80–100 Mo | Aucun |
-| `.\build.ps1 -Installer` | `installer\output\WinBack-0.1.0-Setup.exe` | ~80–100 Mo | Aucun |
+| `.\build.ps1 -Installer` | `installer\output\WinBack-0.1.1-Setup.exe` | ~80–100 Mo | Aucun |
 | `.\build.ps1 -Clean` | (nettoyage avant build) | — | — |
 
 ```powershell
@@ -115,7 +115,7 @@ Aucun — si Inno Setup 6 n'est pas détecté, `build.ps1` le télécharge et l'
 
 #### Installation via le setup
 
-Lancer `WinBack-0.1.0-Setup.exe` et suivre l'assistant. Options proposées :
+Lancer `WinBack-0.1.1-Setup.exe` et suivre l'assistant. Options proposées :
 
 - Raccourci sur le bureau (décoché par défaut)
 - Démarrage automatique avec Windows (coché par défaut)
@@ -249,7 +249,7 @@ The `build.ps1` script produces the executable and/or the installer.
 |---|---|---|---|
 | `.\build.ps1` | `publish\WinBack.exe` | ~15–20 MB | .NET 9 Runtime installed |
 | `.\build.ps1 -SelfContained` | `publish\WinBack.exe` | ~80–100 MB | None |
-| `.\build.ps1 -Installer` | `installer\output\WinBack-0.1.0-Setup.exe` | ~80–100 MB | None |
+| `.\build.ps1 -Installer` | `installer\output\WinBack-0.1.1-Setup.exe` | ~80–100 MB | None |
 | `.\build.ps1 -Clean` | (clean before build) | — | — |
 
 ```powershell
@@ -267,7 +267,7 @@ None — if Inno Setup 6 is not detected, `build.ps1` downloads and installs it 
 
 #### Installing via the setup wizard
 
-Run `WinBack-0.1.0-Setup.exe` and follow the wizard. Optional steps:
+Run `WinBack-0.1.1-Setup.exe` and follow the wizard. Optional steps:
 
 - Desktop shortcut (unchecked by default)
 - Start automatically with Windows (checked by default)

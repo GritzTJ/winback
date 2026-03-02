@@ -7,6 +7,13 @@ using Xunit;
 
 namespace WinBack.Tests;
 
+// Factory minimaliste — suffisant pour les tests (pas de pooling)
+file sealed class TestDbContextFactory(DbContextOptions<WinBackContext> options)
+    : IDbContextFactory<WinBackContext>
+{
+    public WinBackContext CreateDbContext() => new WinBackContext(options);
+}
+
 public class AuditTests : IAsyncDisposable
 {
     private readonly IDbContextFactory<WinBackContext> _dbFactory;
@@ -22,7 +29,7 @@ public class AuditTests : IAsyncDisposable
             .UseSqlite($"Data Source={_dbPath}")
             .Options;
 
-        _dbFactory = new PooledDbContextFactory<WinBackContext>(options);
+        _dbFactory = new TestDbContextFactory(options);
 
         using var db = _dbFactory.CreateDbContext();
         db.Initialize();
@@ -93,25 +100,18 @@ public class AuditTests : IAsyncDisposable
     public async Task Audit_WithMatchingFile_ReturnsOk()
     {
         var (profile, pair) = await CreateProfileWithPairAsync();
-
-        // Créer un fichier temporaire et calculer son hash réel
-        var destDir = Path.Combine(Path.GetTempPath(), "AuditTest_Ok_" + Guid.NewGuid());
-        Directory.CreateDirectory(destDir);
         var fileName = "test.txt";
-        var destFile = Path.Combine(destDir, fileName);
-        await File.WriteAllTextAsync(destFile, "contenu de test");
 
-        var hash = await DiffCalculator.ComputeHashAsync(destFile, CancellationToken.None);
-        await AddSnapshotAsync(profile.Id, pair.Id, fileName, hash);
-
-        // destRoot tel que Path.Combine(destRoot, pair.DestRelativePath, fileName) = destFile
-        // pair.DestRelativePath = "Dest", donc on veut destRoot = parent de destDir
-        // Mais ici on recrée la structure : destRoot/Dest/fileName
+        // Créer le fichier dans la structure destRoot/Dest/
         var destRoot = Path.Combine(Path.GetTempPath(), "AuditRoot_Ok_" + Guid.NewGuid());
         var destWithPair = Path.Combine(destRoot, pair.DestRelativePath);
         Directory.CreateDirectory(destWithPair);
-        var finalDest = Path.Combine(destWithPair, fileName);
-        File.Copy(destFile, finalDest);
+        var destFile = Path.Combine(destWithPair, fileName);
+        await File.WriteAllTextAsync(destFile, "contenu de test");
+
+        // Stocker le hash réel du fichier sauvegardé
+        var hash = await DiffCalculator.ComputeHashAsync(destFile, CancellationToken.None);
+        await AddSnapshotAsync(profile.Id, pair.Id, fileName, hash);
 
         try
         {
@@ -124,7 +124,6 @@ public class AuditTests : IAsyncDisposable
         finally
         {
             Directory.Delete(destRoot, recursive: true);
-            Directory.Delete(destDir, recursive: true);
         }
     }
 

@@ -25,10 +25,16 @@ public enum BackupPhase { Scanning, Copying, Deleting, Verifying, Done }
 /// La clé est calculée par la couche App (après saisie du mot de passe) et passée ici :
 /// elle n'est jamais stockée en base de données.
 /// </param>
+/// <param name="PauseHandle">
+/// Handle de pause partagé entre l'orchestrateur et le moteur.
+/// Initialement mis (<c>IsSet = true</c> = en cours) ; <c>Reset()</c> met en pause la sauvegarde,
+/// <c>Set()</c> la reprend. <c>null</c> = pas de pause possible pour cette exécution.
+/// </param>
 public record BackupEngineOptions(
     int MaxRetryCount = 0,
     int RetryDelayMs = 500,
-    byte[]? EncryptionKey = null);
+    byte[]? EncryptionKey = null,
+    ManualResetEventSlim? PauseHandle = null);
 
 /// <summary>
 /// Moteur de sauvegarde incrémentielle. Gère le cycle complet :
@@ -180,6 +186,10 @@ public class BackupEngine
         {
             ct.ThrowIfCancellationRequested();
 
+            // Mettre en pause entre deux fichiers si l'utilisateur l'a demandé
+            if (options.PauseHandle is { IsSet: false })
+                await WaitIfPausedAsync(options.PauseHandle, progress, processed, totalFiles, run, ct);
+
             var isAdded = diff.Added.Contains(relativePath);
             progress?.Report(new BackupProgress(relativePath, ++processed, totalFiles,
                 run.BytesTransferred, BackupPhase.Copying));
@@ -285,6 +295,11 @@ public class BackupEngine
         foreach (var relativePath in diff.Deleted)
         {
             ct.ThrowIfCancellationRequested();
+
+            // Même logique de pause entre deux suppressions
+            if (options.PauseHandle is { IsSet: false })
+                await WaitIfPausedAsync(options.PauseHandle, progress, processed, totalFiles, run, ct);
+
             progress?.Report(new BackupProgress(relativePath, ++processed, totalFiles,
                 run.BytesTransferred, BackupPhase.Deleting));
 
@@ -420,6 +435,73 @@ public class BackupEngine
         }
     }
 
+    // ── Pause ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Suspend l'exécution du moteur jusqu'à ce que la reprise soit signalée
+    /// ou que le jeton d'annulation soit déclenché.
+    /// Le rapport "En pause…" est émis avant le blocage pour mettre à jour l'UI.
+    /// L'attente est déléguée à un thread de pool pour ne pas bloquer le thread async.
+    /// </summary>
+    private static async Task WaitIfPausedAsync(
+        ManualResetEventSlim pauseHandle,
+        IProgress<BackupProgress>? progress,
+        int processed, int totalFiles,
+        BackupRun run,
+        CancellationToken ct)
+    {
+        // Double-check : évite le Task.Run si la reprise est arrivée entre la vérification
+        // et ici (fenêtre de course très courte, mais possible).
+        if (pauseHandle.IsSet) return;
+
+        progress?.Report(new BackupProgress(
+            "En pause…", processed, totalFiles, run.BytesTransferred, BackupPhase.Copying));
+
+        // ManualResetEventSlim.Wait(CancellationToken) est synchrone → Task.Run pour
+        // libérer le thread async pendant l'attente.
+        await Task.Run(() => pauseHandle.Wait(ct), ct);
+    }
+
+    // ── Prévisualisation ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Calcule les changements qui seraient effectués lors de la prochaine sauvegarde
+    /// sans écrire aucun fichier ni modifier aucun snapshot.
+    /// Seules les paires dont le dossier source est accessible sont prises en compte.
+    /// </summary>
+    /// <returns>
+    /// Résultat agrégé sur toutes les paires actives du profil.
+    /// <see cref="BackupPreviewResult.PairsChecked"/> indique combien de paires
+    /// avaient leur source accessible (0 = disque source déconnecté).
+    /// </returns>
+    public async Task<BackupPreviewResult> PreviewAsync(
+        BackupProfile profile, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        int added = 0, modified = 0, deleted = 0, pairsChecked = 0;
+
+        foreach (var pair in profile.Pairs.Where(p => p.IsActive))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // Ignorer silencieusement les sources inaccessibles
+            if (!Directory.Exists(pair.SourcePath)) continue;
+            pairsChecked++;
+
+            var snapshots = await db.Snapshots
+                .Where(s => s.ProfileId == profile.Id && s.PairId == pair.Id)
+                .ToListAsync(ct);
+
+            var diff = _differ.Compute(pair.SourcePath, snapshots, pair);
+            added    += diff.Added.Count;
+            modified += diff.Modified.Count;
+            deleted  += diff.Deleted.Count;
+        }
+
+        return new BackupPreviewResult(added, modified, deleted, pairsChecked);
+    }
+
     /// <summary>
     /// Vérifie l'intégrité des fichiers sauvegardés en comparant leurs hashs avec les snapshots.
     /// </summary>
@@ -457,3 +539,20 @@ public class BackupEngine
 }
 
 public record AuditResult(int Total, int Ok, int Missing, int Corrupted, List<string> CorruptedPaths);
+
+/// <summary>
+/// Résultat d'une prévisualisation de sauvegarde.
+/// Résume les changements qui seraient appliqués sans exécuter la sauvegarde.
+/// </summary>
+/// <param name="FilesAdded">Fichiers nouveaux qui seraient copiés.</param>
+/// <param name="FilesModified">Fichiers modifiés qui seraient mis à jour.</param>
+/// <param name="FilesDeleted">Fichiers supprimés qui seraient traités (miroir/corbeille).</param>
+/// <param name="PairsChecked">Nombre de paires dont la source était accessible.</param>
+public record BackupPreviewResult(int FilesAdded, int FilesModified, int FilesDeleted, int PairsChecked)
+{
+    /// <summary>Nombre total de fichiers à traiter.</summary>
+    public int Total => FilesAdded + FilesModified + FilesDeleted;
+
+    /// <summary>Vrai s'il y a au moins un changement à effectuer.</summary>
+    public bool HasChanges => Total > 0;
+}

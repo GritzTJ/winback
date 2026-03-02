@@ -88,8 +88,13 @@
                 <StackPanel Visibility="{Binding HasProfiles, Converter={StaticResource BoolVis}}" ctrl:StackPanelEx.Spacing="12">
                     <Grid>
                         <TextBlock Text="Mes disques" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center"/>
-                        <Button Content="+ Ajouter" Style="{StaticResource ButtonSecondary}"
-                                HorizontalAlignment="Right" Click="AddProfile_Click"/>
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" ctrl:StackPanelEx.Spacing="6">
+                            <Button Content="Importer" Style="{StaticResource ButtonIcon}"
+                                    Click="ImportProfile_Click"
+                                    ToolTip="Importer un profil depuis un fichier .winback.json"/>
+                            <Button Content="+ Ajouter" Style="{StaticResource ButtonSecondary}"
+                                    Click="AddProfile_Click"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- Liste des profils -->
@@ -133,10 +138,31 @@
                                                         Style="{StaticResource ButtonIcon}"
                                                         ToolTip="Vérifier l'intégrité des fichiers sauvegardés"/>
 
+                                                <!-- Pause / Reprendre (si en cours) -->
+                                                <Button Content="{Binding PauseResumeLabel}"
+                                                        Command="{Binding PauseResumeCommand}"
+                                                        Style="{StaticResource ButtonIcon}"
+                                                        Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}"
+                                                        ToolTip="Mettre en pause ou reprendre la sauvegarde en cours"/>
+
                                                 <!-- Annuler (si en cours) -->
                                                 <Button Content="Annuler" Style="{StaticResource ButtonDanger}"
                                                         Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}"
                                                         Command="{Binding CancelCommand}"/>
+
+                                                <!-- Aperçu (si non en cours) -->
+                                                <Button Content="Aperçu"
+                                                        Command="{Binding PreviewCommand}"
+                                                        Style="{StaticResource ButtonIcon}"
+                                                        Visibility="{Binding IsRunning, Converter={StaticResource InvBoolVis}}"
+                                                        ToolTip="Voir les fichiers qui seront modifiés lors de la prochaine sauvegarde"/>
+
+                                                <!-- Exporter (si non en cours) -->
+                                                <Button Content="Exporter" Style="{StaticResource ButtonIcon}"
+                                                        Visibility="{Binding IsRunning, Converter={StaticResource InvBoolVis}}"
+                                                        Tag="{Binding ProfileId}"
+                                                        Click="ExportProfile_Click"
+                                                        ToolTip="Exporter le profil vers un fichier .winback.json"/>
 
                                                 <!-- Modifier -->
                                                 <Button Content="Modifier" Style="{StaticResource ButtonIcon}"

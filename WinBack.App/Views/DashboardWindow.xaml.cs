@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using WinBack.App.ViewModels;
 
@@ -77,6 +78,57 @@ public partial class DashboardWindow : Window
 
             if (result == MessageBoxResult.Yes)
                 await _vm.DeleteProfileCommand.ExecuteAsync(profileId);
+        }
+    }
+
+    private async void ExportProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: int profileId }) return;
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title      = "Exporter le profil WinBack",
+            Filter     = "Profil WinBack (*.winback.json)|*.winback.json",
+            DefaultExt = ".winback.json"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var json = await _vm.ExportProfileAsync(profileId);
+            await File.WriteAllTextAsync(dialog.FileName, json);
+            MessageBox.Show($"Profil exporté :\n{dialog.FileName}",
+                "WinBack — Export réussi",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Impossible d'exporter le profil :\n{ex.Message}",
+                "WinBack — Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void ImportProfile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title  = "Importer un profil WinBack",
+            Filter = "Profil WinBack (*.winback.json)|*.winback.json"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(dialog.FileName);
+            await _vm.ImportProfileAsync(json);
+            MessageBox.Show("Profil importé avec succès.",
+                "WinBack — Import réussi",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Impossible d'importer le profil :\n{ex.Message}",
+                "WinBack — Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 }

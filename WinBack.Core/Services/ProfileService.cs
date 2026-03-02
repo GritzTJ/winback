@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using WinBack.Core.Data;
 using WinBack.Core.Models;
 
@@ -157,5 +158,107 @@ public class ProfileService
         settings.Id = 1;
         db.Settings.Update(settings);
         await db.SaveChangesAsync();
+    }
+
+    // ── Export / Import de profils ────────────────────────────────────────────
+
+    // Options JSON communes : camelCase, indenté pour la lisibilité
+    private static readonly JsonSerializerOptions _jsonExportOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private static readonly JsonSerializerOptions _jsonImportOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    /// <summary>
+    /// Sérialise un profil (avec ses paires) au format JSON WinBack.
+    /// Le JSON résultant peut être sauvegardé dans un fichier <c>.winback.json</c>
+    /// et réimporté sur n'importe quelle machine via <see cref="ImportProfileAsync"/>.
+    /// Le mot de passe de chiffrement n'est jamais exporté.
+    /// </summary>
+    /// <param name="profileId">Identifiant du profil à exporter.</param>
+    /// <returns>Chaîne JSON indenté représentant le profil.</returns>
+    public async Task<string> ExportProfileAsync(int profileId)
+    {
+        var profile = await GetProfileByIdAsync(profileId)
+            ?? throw new InvalidOperationException($"Profil {profileId} introuvable.");
+
+        var dto = new ProfileExportDto(
+            FormatVersion: "1",
+            Name: profile.Name,
+            VolumeGuid: profile.VolumeGuid,
+            DiskLabel: profile.DiskLabel,
+            Strategy: profile.Strategy.ToString(),
+            RetentionDays: profile.RetentionDays,
+            InsertionDelaySeconds: profile.InsertionDelaySeconds,
+            EnableHashVerification: profile.EnableHashVerification,
+            EnableVss: profile.EnableVss,
+            AutoStart: profile.AutoStart,
+            EnableEncryption: profile.EnableEncryption,
+            Pairs: profile.Pairs.Select(p => new PairExportDto(
+                SourcePath: p.SourcePath,
+                DestRelativePath: p.DestRelativePath,
+                ExcludePatternsJson: p.ExcludePatternsJson,
+                IsActive: p.IsActive)).ToList());
+
+        return JsonSerializer.Serialize(dto, _jsonExportOptions);
+    }
+
+    /// <summary>
+    /// Crée un nouveau profil à partir d'un JSON exporté par <see cref="ExportProfileAsync"/>.
+    /// Un identifiant neuf est attribué au profil importé (pas de collision avec les profils existants).
+    /// Note : si le chiffrement était activé sur le profil exporté, il sera activé ici aussi,
+    /// mais le mot de passe devra être ressaisi lors de la prochaine sauvegarde.
+    /// </summary>
+    /// <param name="json">Contenu JSON d'un fichier <c>.winback.json</c>.</param>
+    /// <returns>Le profil créé en base de données.</returns>
+    /// <exception cref="InvalidDataException">Si le JSON est invalide ou la version non supportée.</exception>
+    public async Task<BackupProfile> ImportProfileAsync(string json)
+    {
+        ProfileExportDto dto;
+        try
+        {
+            dto = JsonSerializer.Deserialize<ProfileExportDto>(json, _jsonImportOptions)
+                ?? throw new InvalidDataException("Le fichier ne contient pas de profil valide.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Fichier JSON invalide : {ex.Message}", ex);
+        }
+
+        if (dto.FormatVersion != "1")
+            throw new InvalidDataException(
+                $"Version de format non supportée : {dto.FormatVersion}. " +
+                "Mettez à jour WinBack pour importer ce fichier.");
+
+        if (!Enum.TryParse<BackupStrategy>(dto.Strategy, ignoreCase: true, out var strategy))
+            throw new InvalidDataException($"Stratégie inconnue : {dto.Strategy}");
+
+        var profile = new BackupProfile
+        {
+            Name           = dto.Name,
+            VolumeGuid     = dto.VolumeGuid,
+            DiskLabel      = dto.DiskLabel,
+            Strategy       = strategy,
+            RetentionDays  = dto.RetentionDays,
+            InsertionDelaySeconds  = dto.InsertionDelaySeconds,
+            EnableHashVerification = dto.EnableHashVerification,
+            EnableVss      = dto.EnableVss,
+            AutoStart      = dto.AutoStart,
+            EnableEncryption = dto.EnableEncryption,
+            Pairs = dto.Pairs.Select(p => new BackupPair
+            {
+                SourcePath         = p.SourcePath,
+                DestRelativePath   = p.DestRelativePath,
+                ExcludePatternsJson = p.ExcludePatternsJson,
+                IsActive           = p.IsActive
+            }).ToList()
+        };
+
+        return await CreateProfileAsync(profile);
     }
 }

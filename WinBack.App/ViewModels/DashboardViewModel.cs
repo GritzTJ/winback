@@ -74,6 +74,26 @@ public partial class DashboardViewModel : ViewModelBase
         await LoadAsync();
     }
 
+    // ── Export / Import ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sérialise le profil en JSON WinBack et retourne la chaîne.
+    /// Appelé par le code-behind de <see cref="DashboardWindow"/> qui gère
+    /// la boîte de dialogue de sauvegarde de fichier.
+    /// </summary>
+    public Task<string> ExportProfileAsync(int profileId)
+        => _profileService.ExportProfileAsync(profileId);
+
+    /// <summary>
+    /// Importe un profil depuis un JSON WinBack, puis recharge la liste des profils.
+    /// Appelé par le code-behind de <see cref="DashboardWindow"/> après ouverture du fichier.
+    /// </summary>
+    public async Task ImportProfileAsync(string json)
+    {
+        await _profileService.ImportProfileAsync(json);
+        await LoadAsync();
+    }
+
     /// <summary>
     /// Appelé par l'orchestrateur quand une sauvegarde démarre.
     /// Met à jour la carte correspondante avec l'indicateur de progression.
@@ -87,6 +107,7 @@ public partial class DashboardViewModel : ViewModelBase
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             card.IsRunning = true;
+            card.IsPaused  = false; // réinitialiser l'état pause au démarrage d'une nouvelle sauvegarde
             if (e.Progress != null)
             {
                 card.ProgressText = e.Progress.CurrentFile;
@@ -112,9 +133,10 @@ public partial class DashboardViewModel : ViewModelBase
             {
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    card.IsRunning = false;
+                    card.IsRunning     = false;
+                    card.IsPaused      = false; // garantir la réinitialisation si annulée en pause
                     card.LastRunStatus = e.Run.Status;
-                    card.LastRunDate = e.Run.FinishedAt;
+                    card.LastRunDate   = e.Run.FinishedAt;
                 });
             }
 
@@ -161,6 +183,23 @@ public partial class ProfileCardViewModel : ObservableObject
     [ObservableProperty] private BackupRunStatus? _lastRunStatus;
     [ObservableProperty] private DateTime? _lastRunDate;
 
+    // ── Pause ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Vrai si la sauvegarde est actuellement en pause.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PauseResumeLabel))]
+    private bool _isPaused;
+
+    /// <summary>Texte du bouton Pause/Reprendre selon l'état courant.</summary>
+    public string PauseResumeLabel => IsPaused ? "▶ Reprendre" : "⏸ Pause";
+
+    // ── Prévisualisation ──────────────────────────────────────────────────────
+
+    /// <summary>Vrai pendant le calcul du diff de prévisualisation.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PreviewCommand))]
+    private bool _isPreviewing;
+
     public ProfileCardViewModel(BackupProfile profile, BackupOrchestrator orchestrator, bool hasHashes = false)
     {
         _orchestrator = orchestrator;
@@ -190,6 +229,47 @@ public partial class ProfileCardViewModel : ObservableObject
     /// <summary>Annule la sauvegarde en cours pour ce profil.</summary>
     [RelayCommand]
     private async Task CancelAsync() => await _orchestrator.CancelBackupAsync(ProfileId);
+
+    /// <summary>Bascule entre pause et reprise de la sauvegarde en cours.</summary>
+    [RelayCommand]
+    private async Task PauseResumeAsync()
+    {
+        if (IsPaused)
+            await _orchestrator.ResumeBackupAsync(ProfileId);
+        else
+            await _orchestrator.PauseBackupAsync(ProfileId);
+        IsPaused = !IsPaused;
+    }
+
+    /// <summary>Calcule le diff de la prochaine sauvegarde sans rien écrire.</summary>
+    [RelayCommand(CanExecute = nameof(CanPreview))]
+    private async Task PreviewAsync()
+    {
+        IsPreviewing = true;
+        try
+        {
+            var result = await _orchestrator.PreviewBackupAsync(ProfileId);
+            var msg = result.HasChanges
+                ? $"Aperçu de la prochaine sauvegarde\n\n" +
+                  $"+  Ajouts    : {result.FilesAdded}\n" +
+                  $"~  Modifiés  : {result.FilesModified}\n" +
+                  $"-  Supprimés : {result.FilesDeleted}\n\n" +
+                  $"{result.PairsChecked} dossier(s) analysé(s)"
+                : $"Aucun changement détecté.\n\n{result.PairsChecked} dossier(s) analysé(s)";
+            System.Windows.MessageBox.Show(msg, "WinBack — Aperçu de sauvegarde",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Impossible de calculer l'aperçu :\n{ex.Message}",
+                "WinBack — Erreur", System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+        }
+        finally { IsPreviewing = false; }
+    }
+
+    private bool CanPreview => !IsPreviewing;
 
     /// <summary>Lance un audit d'intégrité à la demande pour ce profil.</summary>
     [RelayCommand]

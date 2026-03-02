@@ -20,6 +20,11 @@ public class BackupOrchestrator
     private readonly HashSet<int> _interruptedProfiles = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    // Handles de pause par profil — partagés avec BackupEngine via BackupEngineOptions.
+    // Cycle de vie : créé dans StartBackupAsync, supprimé dans le finally de StartBackupAsync.
+    // ManualResetEventSlim.Reset() = met en pause, .Set() = reprend.
+    private readonly Dictionary<int, ManualResetEventSlim> _pauseHandles = new();
+
     /// <summary>
     /// Callback appelé par la couche App pour demander le mot de passe de chiffrement
     /// avant de démarrer une sauvegarde chiffrée.
@@ -134,11 +139,10 @@ public class BackupOrchestrator
             }
         }
 
-        var options = new BackupEngineOptions(settings.MaxRetryCount, settings.RetryDelayMs, encryptionKey);
-
-        // Le CTS est capturé dans une variable locale avant de relâcher le verrou
-        // pour éviter la race condition avec CancelBackupAsync.
+        // Le CTS et le handle de pause sont créés ensemble dans le verrou
+        // pour éviter les race conditions avec CancelBackupAsync / PauseBackupAsync.
         CancellationTokenSource? cts = null;
+        ManualResetEventSlim? pauseHandle = null;
 
         await _lock.WaitAsync();
         try
@@ -149,13 +153,18 @@ public class BackupOrchestrator
                 return;
             }
 
-            cts = new CancellationTokenSource();
-            _activeTasks[profile.Id] = (cts, drive.DriveLetter[0]);
+            cts         = new CancellationTokenSource();
+            pauseHandle = new ManualResetEventSlim(initialState: true); // initialState=true → non-pausé
+            _activeTasks[profile.Id]  = (cts, drive.DriveLetter[0]);
+            _pauseHandles[profile.Id] = pauseHandle;
         }
         finally
         {
             _lock.Release();
         }
+
+        var options = new BackupEngineOptions(
+            settings.MaxRetryCount, settings.RetryDelayMs, encryptionKey, pauseHandle);
 
         // Si on arrive ici, cts est forcément non-null (le return ci-dessus l'aurait stoppé).
         try
@@ -212,8 +221,13 @@ public class BackupOrchestrator
             await _lock.WaitAsync();
             _activeTasks.Remove(profile.Id);
             _interruptedProfiles.Remove(profile.Id);
+            _pauseHandles.Remove(profile.Id);
             _lock.Release();
             cts?.Dispose();
+            // Si la sauvegarde était en pause lors de l'annulation, libérer le handle
+            // pour ne pas bloquer le thread de pool qui attendait dessus.
+            pauseHandle?.Set();
+            pauseHandle?.Dispose();
         }
     }
 
@@ -234,9 +248,55 @@ public class BackupOrchestrator
         }
     }
 
-    public bool IsBackupRunning(int profileId)
+    public bool IsBackupRunning(int profileId) => _activeTasks.ContainsKey(profileId);
+
+    /// <summary>
+    /// Met en pause la sauvegarde en cours pour le profil indiqué.
+    /// Le moteur terminera le fichier en cours avant de se suspendre.
+    /// Sans effet si aucune sauvegarde n'est active pour ce profil.
+    /// </summary>
+    public async Task PauseBackupAsync(int profileId)
     {
-        return _activeTasks.ContainsKey(profileId);
+        await _lock.WaitAsync();
+        try
+        {
+            if (_pauseHandles.TryGetValue(profileId, out var handle))
+                handle.Reset(); // Bloque le moteur au prochain point de vérification
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>
+    /// Reprend la sauvegarde précédemment mise en pause pour le profil indiqué.
+    /// Sans effet si le profil n'est pas en pause.
+    /// </summary>
+    public async Task ResumeBackupAsync(int profileId)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            if (_pauseHandles.TryGetValue(profileId, out var handle))
+                handle.Set(); // Débloque le moteur
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>
+    /// Vrai si la sauvegarde du profil est actuellement en pause.
+    /// </summary>
+    public bool IsBackupPaused(int profileId)
+        => _pauseHandles.TryGetValue(profileId, out var h) && !h.IsSet;
+
+    /// <summary>
+    /// Calcule les changements qu'effectuerait la prochaine sauvegarde du profil
+    /// sans écrire ni modifier aucun fichier.
+    /// </summary>
+    public async Task<BackupPreviewResult> PreviewBackupAsync(
+        int profileId, CancellationToken ct = default)
+    {
+        var profile = await _profiles.GetProfileByIdAsync(profileId)
+            ?? throw new InvalidOperationException($"Profil {profileId} introuvable.");
+        return await _engine.PreviewAsync(profile, ct);
     }
 
     public async Task<AuditResult> RunAuditAsync(int profileId, string destRoot, CancellationToken ct = default)

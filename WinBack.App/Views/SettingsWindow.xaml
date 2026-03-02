@@ -43,6 +43,9 @@
                         <CheckBox Content="Afficher les notifications Windows après chaque sauvegarde"
                                   IsChecked="{Binding ShowNotifications}"
                                   Style="{StaticResource CheckBoxStyle}"/>
+                        <CheckBox Content="Cliquer sur une notification ouvre l'historique"
+                                  IsChecked="{Binding ClickableNotifications}"
+                                  Style="{StaticResource CheckBoxStyle}"/>
                         <CheckBox Content="Démarrer réduit dans la barre système"
                                   IsChecked="{Binding StartMinimized}"
                                   Style="{StaticResource CheckBoxStyle}"/>

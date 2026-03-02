@@ -46,6 +46,12 @@ public class BackupProfile
     /// <summary>Démarrer la sauvegarde automatiquement sans confirmation.</summary>
     public bool AutoStart { get; set; } = true;
 
+    /// <summary>Chiffrer les fichiers copiés (AES-256-CBC, clé dérivée du mot de passe).</summary>
+    public bool EnableEncryption { get; set; } = false;
+
+    /// <summary>Mot de passe chiffré par DPAPI (base64). Null si chiffrement désactivé.</summary>
+    public string? EncryptionKeyProtected { get; set; }
+
     public List<BackupPair> Pairs { get; set; } = [];
     public List<BackupRun> Runs { get; set; } = [];
     public List<FileSnapshot> Snapshots { get; set; } = [];

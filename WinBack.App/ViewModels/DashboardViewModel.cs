@@ -52,7 +52,7 @@ public partial class DashboardViewModel : ViewModelBase
 
             Profiles.Clear();
             foreach (var p in profiles)
-                Profiles.Add(new ProfileCardViewModel(p, _orchestrator));
+                Profiles.Add(new ProfileCardViewModel(p, _orchestrator, p.EnableHashVerification));
 
             RecentRuns.Clear();
             foreach (var r in runs)
@@ -143,6 +143,7 @@ public partial class DashboardViewModel : ViewModelBase
 public partial class ProfileCardViewModel : ObservableObject
 {
     private readonly BackupOrchestrator _orchestrator;
+    private readonly bool _hasHashes;
 
     public int ProfileId { get; }
     public string Name { get; }
@@ -151,19 +152,24 @@ public partial class ProfileCardViewModel : ObservableObject
     /// <summary>Nombre de paires source→destination actives dans ce profil.</summary>
     public int PairCount { get; }
 
+    /// <summary>Vrai si la vérification d'intégrité est activée (des hashs sont disponibles).</summary>
+    public bool HasHashes { get; }
+
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private string _progressText = string.Empty;
     [ObservableProperty] private int _progressPercent;
     [ObservableProperty] private BackupRunStatus? _lastRunStatus;
     [ObservableProperty] private DateTime? _lastRunDate;
 
-    public ProfileCardViewModel(BackupProfile profile, BackupOrchestrator orchestrator)
+    public ProfileCardViewModel(BackupProfile profile, BackupOrchestrator orchestrator, bool hasHashes = false)
     {
         _orchestrator = orchestrator;
+        _hasHashes = hasHashes;
         ProfileId = profile.Id;
         Name = profile.Name;
         VolumeGuid = profile.VolumeGuid;
         PairCount = profile.Pairs.Count(p => p.IsActive);
+        HasHashes = hasHashes;
     }
 
     /// <summary>Date de la dernière exécution en langage naturel (ex. "il y a 3h").</summary>
@@ -184,6 +190,46 @@ public partial class ProfileCardViewModel : ObservableObject
     /// <summary>Annule la sauvegarde en cours pour ce profil.</summary>
     [RelayCommand]
     private async Task CancelAsync() => await _orchestrator.CancelBackupAsync(ProfileId);
+
+    /// <summary>Lance un audit d'intégrité à la demande pour ce profil.</summary>
+    [RelayCommand]
+    private async Task RunAuditAsync()
+    {
+        if (!_hasHashes)
+        {
+            System.Windows.MessageBox.Show(
+                "Activez la vérification d'intégrité pour ce profil afin de pouvoir lancer l'audit.",
+                "WinBack — Audit", System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = $"Sélectionner la racine de la sauvegarde pour « {Name} »"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        IsRunning = true;
+        try
+        {
+            var result = await _orchestrator.RunAuditAsync(ProfileId, dialog.FolderName);
+
+            var msg = $"Audit terminé — {result.Total} fichier(s) vérifiés\n\n" +
+                      $"✓ OK       : {result.Ok}\n" +
+                      $"✗ Manquant : {result.Missing}\n" +
+                      $"⚠ Corrompu : {result.Corrupted}";
+            if (result.CorruptedPaths.Count > 0)
+                msg += "\n\nFichiers corrompus :\n" + string.Join("\n", result.CorruptedPaths.Take(10));
+
+            System.Windows.MessageBox.Show(msg, "WinBack — Audit d'intégrité",
+                System.Windows.MessageBoxButton.OK,
+                result.Corrupted > 0 || result.Missing > 0
+                    ? System.Windows.MessageBoxImage.Warning
+                    : System.Windows.MessageBoxImage.Information);
+        }
+        finally { IsRunning = false; }
+    }
 
     /// <summary>
     /// Formate une date en texte relatif lisible.

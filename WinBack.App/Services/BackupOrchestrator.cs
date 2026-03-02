@@ -212,6 +212,13 @@ public class BackupOrchestrator
     {
         return _activeTasks.ContainsKey(profileId);
     }
+
+    public async Task<AuditResult> RunAuditAsync(int profileId, string destRoot, CancellationToken ct = default)
+    {
+        var profile = await _profiles.GetProfileByIdAsync(profileId)
+            ?? throw new InvalidOperationException($"Profil {profileId} introuvable");
+        return await _engine.RunAuditAsync(profile, destRoot, ct);
+    }
 }
 
 // ── Événements ────────────────────────────────────────────────────────────────

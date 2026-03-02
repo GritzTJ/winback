@@ -125,6 +125,11 @@
                                                                Foreground="{Binding LastRunStatus, Converter={StaticResource StatusBrush}}"/>
                                                 </Border>
 
+                                                <!-- Auditer (toujours visible) -->
+                                                <Button Content="Auditer" Command="{Binding RunAuditCommand}"
+                                                        Style="{StaticResource ButtonIcon}"
+                                                        ToolTip="Vérifier l'intégrité des fichiers sauvegardés"/>
+
                                                 <!-- Annuler (si en cours) -->
                                                 <Button Content="Annuler" Style="{StaticResource ButtonDanger}"
                                                         Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}"

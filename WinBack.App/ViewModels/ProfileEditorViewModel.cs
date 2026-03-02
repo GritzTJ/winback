@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
+using System.Security.Cryptography;
+using System.Text;
 using WinBack.Core.Models;
 using WinBack.Core.Services;
 
@@ -66,6 +68,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private bool enableHashVerification = false;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEncryptionPassword))]
+    private bool enableEncryption = false;
+
+    public bool ShowEncryptionPassword => EnableEncryption;
+
+    /// <summary>Non persisté : utilisé uniquement pour dériver/protéger la clé lors de Save.</summary>
+    public string EncryptionPassword { get; set; } = string.Empty;
+
+    [ObservableProperty]
     private int insertionDelaySeconds = 3;
 
     // ── Étape 4 : Récapitulatif / mode édition ───────────────────────────────
@@ -109,6 +120,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         AutoStart = profile.AutoStart;
         EnableVss = profile.EnableVss;
         EnableHashVerification = profile.EnableHashVerification;
+        EnableEncryption = profile.EnableEncryption;
+        // Le mot de passe DPAPI n'est jamais affiché, EncryptionPassword reste vide
         InsertionDelaySeconds = profile.InsertionDelaySeconds;
 
         Pairs.Clear();
@@ -161,11 +174,22 @@ public partial class ProfileEditorViewModel : ViewModelBase
         NextStepCommand.NotifyCanExecuteChanged();
     }
 
+    private string? ComputeProtectedKey()
+    {
+        if (!EnableEncryption) return null;
+        if (string.IsNullOrEmpty(EncryptionPassword)) return null;
+        var raw = Encoding.UTF8.GetBytes(EncryptionPassword);
+        var prot = ProtectedData.Protect(raw, null, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(prot);
+    }
+
     private async Task SaveAsync()
     {
         SetBusy(true, "Enregistrement…");
         try
         {
+            var protectedKey = ComputeProtectedKey();
+
             if (IsEditMode)
             {
                 var existing = new BackupProfile
@@ -179,6 +203,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
                     AutoStart = AutoStart,
                     EnableVss = EnableVss,
                     EnableHashVerification = EnableHashVerification,
+                    EnableEncryption = EnableEncryption,
+                    EncryptionKeyProtected = EnableEncryption ? protectedKey : null,
                     InsertionDelaySeconds = InsertionDelaySeconds,
                     Pairs = Pairs.Select(p => new BackupPair
                     {
@@ -207,6 +233,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
                     AutoStart = AutoStart,
                     EnableVss = EnableVss,
                     EnableHashVerification = EnableHashVerification,
+                    EnableEncryption = EnableEncryption,
+                    EncryptionKeyProtected = EnableEncryption ? protectedKey : null,
                     InsertionDelaySeconds = InsertionDelaySeconds,
                     Pairs = Pairs.Select(p => new BackupPair
                     {

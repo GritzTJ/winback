@@ -280,6 +280,19 @@
                             <CheckBox Content="Vérifier l'intégrité par hash après copie (plus lent)"
                                       IsChecked="{Binding EnableHashVerification}"
                                       Style="{StaticResource CheckBoxStyle}"/>
+                            <CheckBox Content="Chiffrer les fichiers sur le disque de sauvegarde (AES-256)"
+                                      IsChecked="{Binding EnableEncryption}"
+                                      Style="{StaticResource CheckBoxStyle}"/>
+                            <StackPanel Visibility="{Binding ShowEncryptionPassword, Converter={StaticResource BoolVis}}"
+                                        ctrl:StackPanelEx.Spacing="6">
+                                <TextBlock Text="Mot de passe de chiffrement"
+                                           Style="{StaticResource TextCaption}"/>
+                                <PasswordBox x:Name="PasswordBoxEncryption"
+                                             PasswordChanged="PasswordBoxEncryption_Changed"/>
+                                <TextBlock Text="Le mot de passe est protégé par DPAPI (compte Windows actuel)."
+                                           Style="{StaticResource TextCaption}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
 
                             <StackPanel Orientation="Horizontal" ctrl:StackPanelEx.Spacing="10">
                                 <TextBlock Text="Délai avant démarrage :" Style="{StaticResource TextBody}"

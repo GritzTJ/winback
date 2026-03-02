@@ -27,6 +27,12 @@ public class ProfileService
             .ToListAsync();
     }
 
+    public async Task<BackupProfile?> GetProfileByIdAsync(int profileId)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.Profiles.Include(p => p.Pairs).FirstOrDefaultAsync(p => p.Id == profileId);
+    }
+
     public async Task<BackupProfile?> GetByVolumeGuidAsync(string volumeGuid)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();

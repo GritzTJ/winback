@@ -178,6 +178,8 @@ public class BackupEngine
 
             try
             {
+                string? verifiedHash = null;
+
                 if (!dryRun)
                 {
                     var destDir = Path.GetDirectoryName(destFile)!;
@@ -188,7 +190,15 @@ public class BackupEngine
                     {
                         try
                         {
-                            await CopyFileAsync(vssFile, destFile, ct);
+                            if (profile.EnableEncryption && profile.EncryptionKeyProtected != null)
+                            {
+                                var key = DeriveKey(GetPassword(profile.EncryptionKeyProtected));
+                                await CopyAndEncryptFileAsync(vssFile, destFile, key, ct);
+                            }
+                            else
+                            {
+                                await CopyFileAsync(vssFile, destFile, ct);
+                            }
                             break;
                         }
                         catch (Exception ex) when (attempt < options.MaxRetryCount && !ct.IsCancellationRequested)
@@ -200,11 +210,12 @@ public class BackupEngine
                         }
                     }
 
-                    if (profile.EnableHashVerification)
+                    // Hash verification : non applicable si le fichier est chiffré (hash ciphertext ≠ hash source)
+                    if (profile.EnableHashVerification && !profile.EnableEncryption)
                     {
                         progress?.Report(new BackupProgress(relativePath, processed, totalFiles,
                             run.BytesTransferred, BackupPhase.Verifying));
-                        await VerifyIntegrityAsync(sourceFile, destFile, ct);
+                        verifiedHash = await VerifyIntegrityAsync(sourceFile, destFile, ct);
                     }
                 }
 
@@ -229,6 +240,7 @@ public class BackupEngine
 
                 snap.Size = fileInfo.Exists ? fileInfo.Length : 0;
                 snap.LastModified = fileInfo.Exists ? fileInfo.LastWriteTimeUtc : DateTime.UtcNow;
+                if (verifiedHash != null) snap.Hash = verifiedHash;
 
                 if (isAdded) run.FilesAdded++;
                 else run.FilesModified++;
@@ -332,12 +344,44 @@ public class BackupEngine
         File.SetLastWriteTimeUtc(dest, File.GetLastWriteTimeUtc(source));
     }
 
-    private static async Task VerifyIntegrityAsync(string source, string dest, CancellationToken ct)
+    private static async Task<string> VerifyIntegrityAsync(string source, string dest, CancellationToken ct)
     {
         var hashSource = await DiffCalculator.ComputeHashAsync(source, ct);
-        var hashDest = await DiffCalculator.ComputeHashAsync(dest, ct);
+        var hashDest   = await DiffCalculator.ComputeHashAsync(dest, ct);
         if (!string.Equals(hashSource, hashDest, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Vérification d'intégrité échouée : {Path.GetFileName(source)}");
+        return hashSource;
+    }
+
+    private static byte[] DeriveKey(string password)
+    {
+        return System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(password));
+    }
+
+    private static string GetPassword(string protectedBase64)
+    {
+        var data = System.Security.Cryptography.ProtectedData.Unprotect(
+            Convert.FromBase64String(protectedBase64), null,
+            System.Security.Cryptography.DataProtectionScope.CurrentUser);
+        return System.Text.Encoding.UTF8.GetString(data);
+    }
+
+    private static async Task CopyAndEncryptFileAsync(string source, string dest, byte[] key, CancellationToken ct)
+    {
+        using var aes = System.Security.Cryptography.Aes.Create();
+        aes.Key = key;
+        aes.GenerateIV();
+
+        await using var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None,
+            1024 * 1024, FileOptions.Asynchronous);
+        await dst.WriteAsync(aes.IV, ct);
+
+        await using var src = new FileStream(source, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var cs = new System.Security.Cryptography.CryptoStream(
+            dst, aes.CreateEncryptor(), System.Security.Cryptography.CryptoStreamMode.Write);
+        await src.CopyToAsync(cs, ct);
     }
 
     private static async Task MoveToRecycleBinAsync(
@@ -378,4 +422,41 @@ public class BackupEngine
             dirPath = Path.GetDirectoryName(dirPath)!;
         }
     }
+
+    /// <summary>
+    /// Vérifie l'intégrité des fichiers sauvegardés en comparant leurs hashs avec les snapshots.
+    /// </summary>
+    public async Task<AuditResult> RunAuditAsync(
+        BackupProfile profile, string destRoot, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var snapshots = await db.Snapshots
+            .Include(s => s.Pair)
+            .Where(s => s.ProfileId == profile.Id && s.Hash != null)
+            .ToListAsync(ct);
+
+        if (snapshots.Count == 0)
+            return new AuditResult(0, 0, 0, 0, []);
+
+        int ok = 0, missing = 0, corrupted = 0;
+        var corruptedPaths = new List<string>();
+
+        foreach (var snap in snapshots)
+        {
+            ct.ThrowIfCancellationRequested();
+            var destFile = Path.Combine(destRoot, snap.Pair.DestRelativePath, snap.RelativePath);
+
+            if (!File.Exists(destFile)) { missing++; continue; }
+
+            var hash = await DiffCalculator.ComputeHashAsync(destFile, ct);
+            if (string.Equals(hash, snap.Hash, StringComparison.OrdinalIgnoreCase))
+                ok++;
+            else { corrupted++; corruptedPaths.Add(snap.RelativePath); }
+        }
+
+        return new AuditResult(snapshots.Count, ok, missing, corrupted, corruptedPaths);
+    }
 }
+
+public record AuditResult(int Total, int Ok, int Missing, int Corrupted, List<string> CorruptedPaths);

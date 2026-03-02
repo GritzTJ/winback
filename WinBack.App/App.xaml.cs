@@ -37,6 +37,12 @@ public partial class App : Application
         var notifications = _host.Services.GetRequiredService<NotificationService>();
         notifications.Initialize(_trayIcon);
         _trayIcon.TrayMouseDoubleClick += (_, _) => ShowDashboard();
+        _trayIcon.TrayBalloonTipClicked += async (_, _) =>
+        {
+            var s = await _host.Services.GetRequiredService<ProfileService>().GetSettingsAsync();
+            if (!s.ClickableNotifications) return;
+            Dispatcher.Invoke(() => TrayHistory_Click(this, new RoutedEventArgs()));
+        };
 
         // Créer la fenêtre principale et la définir comme MainWindow AVANT de démarrer le host.
         // L'UsbMonitorService (IHostedService) en a besoin pour attacher son hook WM_DEVICECHANGE.

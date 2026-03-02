@@ -52,6 +52,10 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _retryDelayMs = 500;
 
+    /// <summary>Cliquer sur une notification ouvre la fenêtre d'historique.</summary>
+    [ObservableProperty]
+    private bool _clickableNotifications = true;
+
     /// <summary>Vrai si le retry est activé (MaxRetryCount > 0).</summary>
     public bool IsRetryEnabled => MaxRetryCount > 0;
 
@@ -91,8 +95,9 @@ public partial class SettingsViewModel : ViewModelBase
         StartMinimized    = s.StartMinimized;
         LogLevel          = s.LogLevel;
         LogDirectory      = s.LogDirectory ?? GetDefaultLogDirectory();
-        MaxRetryCount     = s.MaxRetryCount;
-        RetryDelayMs      = s.RetryDelayMs;
+        MaxRetryCount          = s.MaxRetryCount;
+        RetryDelayMs           = s.RetryDelayMs;
+        ClickableNotifications = s.ClickableNotifications;
 
         // La source de vérité pour le démarrage automatique est le registre,
         // pas la base de données (l'utilisateur peut avoir modifié le registre manuellement)
@@ -118,8 +123,9 @@ public partial class SettingsViewModel : ViewModelBase
                 LogLevel          = LogLevel,
                 // Ne persiste pas le chemin s'il correspond au chemin par défaut
                 LogDirectory  = LogDirectory == GetDefaultLogDirectory() ? null : LogDirectory,
-                MaxRetryCount = MaxRetryCount,
-                RetryDelayMs  = RetryDelayMs
+                MaxRetryCount          = MaxRetryCount,
+                RetryDelayMs           = RetryDelayMs,
+                ClickableNotifications = ClickableNotifications
             };
             await _profileService.SaveSettingsAsync(s);
             ApplyStartupSetting(StartWithWindows);

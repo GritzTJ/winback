@@ -100,6 +100,9 @@ public class WinBackContext : DbContext
         {
             "ALTER TABLE AppSettings ADD COLUMN MaxRetryCount INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE AppSettings ADD COLUMN RetryDelayMs INTEGER NOT NULL DEFAULT 500",
+            "ALTER TABLE AppSettings ADD COLUMN ClickableNotifications INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE Profiles ADD COLUMN EnableEncryption INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE Profiles ADD COLUMN EncryptionKeyProtected TEXT NULL",
         };
         foreach (var sql in migrations)
         {

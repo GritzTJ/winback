@@ -33,4 +33,7 @@ public class AppSettings
 
     /// <summary>Délai en ms entre deux tentatives de copie.</summary>
     public int RetryDelayMs { get; set; } = 500;
+
+    /// <summary>Cliquer sur une notification ouvre la fenêtre d'historique.</summary>
+    public bool ClickableNotifications { get; set; } = true;
 }

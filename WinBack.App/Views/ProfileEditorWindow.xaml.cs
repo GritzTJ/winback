@@ -72,4 +72,10 @@ public partial class ProfileEditorWindow : Window
         if (sender is FrameworkElement { Tag: PairRowViewModel pairVm })
             _vm.RemovePairCommand.Execute(pairVm);
     }
+
+    private void PasswordBoxEncryption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is ProfileEditorViewModel vm)
+            vm.EncryptionPassword = ((System.Windows.Controls.PasswordBox)sender).Password;
+    }
 }

@@ -1,14 +1,21 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using WinBack.Core.Services;
 
 namespace WinBack.App.ViewModels;
 
 /// <summary>
 /// ViewModel de la fenêtre de restauration.
-/// Permet à l'utilisateur de choisir le dossier source (sauvegarde),
-/// le dossier destination, d'indiquer si les fichiers sont chiffrés,
-/// de saisir le mot de passe si nécessaire, et de lancer la restauration.
+/// <para>
+/// Flux d'utilisation :
+/// 1. L'utilisateur sélectionne le dossier source → l'arborescence charge automatiquement.
+/// 2. L'utilisateur coche/décoche les fichiers/dossiers à restaurer.
+/// 3. L'utilisateur sélectionne le dossier destination et configure les options.
+/// 4. Clic sur "Restaurer" → seuls les fichiers sélectionnés sont copiés/déchiffrés.
+/// </para>
 /// </summary>
 public partial class RestoreViewModel : ViewModelBase
 {
@@ -16,13 +23,13 @@ public partial class RestoreViewModel : ViewModelBase
 
     // ── Dossiers ─────────────────────────────────────────────────────────────
 
-    /// <summary>Chemin du dossier de sauvegarde à restaurer (ex : D:\Documents).</summary>
+    /// <summary>Chemin du dossier de sauvegarde à restaurer.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartRestoreCommand))]
     [NotifyPropertyChangedFor(nameof(CanStart))]
     private string _sourceFolder = string.Empty;
 
-    /// <summary>Chemin du dossier de destination (ex : C:\Users\tata\Desktop\Documents).</summary>
+    /// <summary>Chemin du dossier de destination sur cette machine.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartRestoreCommand))]
     [NotifyPropertyChangedFor(nameof(CanStart))]
@@ -52,13 +59,47 @@ public partial class RestoreViewModel : ViewModelBase
     [ObservableProperty]
     private bool _overwrite = true;
 
+    // ── Arborescence de sélection ────────────────────────────────────────────
+
+    /// <summary>
+    /// Nœuds racines de l'arborescence du dossier source.
+    /// Chargés automatiquement lorsque <see cref="SourceFolder"/> est défini.
+    /// </summary>
+    public ObservableCollection<FileTreeNode> FileTree { get; } = new();
+
+    /// <summary>Vrai pendant le chargement de l'arborescence.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartRestoreCommand))]
+    [NotifyPropertyChangedFor(nameof(CanStart))]
+    [NotifyPropertyChangedFor(nameof(HasFileTree))]
+    private bool _isLoadingTree;
+
+    /// <summary>Vrai si l'arborescence est chargée et non vide.</summary>
+    public bool HasFileTree => !IsLoadingTree && FileTree.Count > 0;
+
+    /// <summary>
+    /// Résumé textuel de la sélection (ex : "42 / 100 fichier(s) sélectionné(s)").
+    /// Mis à jour chaque fois que la sélection change.
+    /// </summary>
+    public string SelectionSummary
+    {
+        get
+        {
+            if (FileTree.Count == 0) return string.Empty;
+            var (selected, total) = CountFiles();
+            return selected == total
+                ? $"Tous les fichiers sélectionnés ({total})"
+                : $"{selected} / {total} fichier(s) sélectionné(s)";
+        }
+    }
+
     // ── Résultat ─────────────────────────────────────────────────────────────
 
     /// <summary>Résumé du résultat affiché après la restauration.</summary>
     [ObservableProperty]
     private string _resultText = string.Empty;
 
-    /// <summary>Vrai après une restauration terminée avec succès (aucune erreur).</summary>
+    /// <summary>Vrai si la restauration s'est terminée sans erreur.</summary>
     [ObservableProperty]
     private bool _resultIsSuccess;
 
@@ -66,20 +107,67 @@ public partial class RestoreViewModel : ViewModelBase
     [ObservableProperty]
     private bool _showResult;
 
-    /// <summary>Conditions nécessaires pour activer le bouton "Restaurer".</summary>
+    // ── Condition d'activation du bouton Restaurer ────────────────────────────
+
+    /// <summary>
+    /// Vrai si toutes les conditions sont remplies pour lancer la restauration :
+    /// dossier source et destination renseignés, mot de passe si chiffrement activé,
+    /// arborescence chargée et au moins un fichier sélectionné.
+    /// </summary>
     public bool CanStart =>
         !string.IsNullOrWhiteSpace(SourceFolder) &&
         !string.IsNullOrWhiteSpace(DestinationFolder) &&
-        (!IsEncrypted || !string.IsNullOrWhiteSpace(Password));
+        (!IsEncrypted || !string.IsNullOrWhiteSpace(Password)) &&
+        !IsLoadingTree &&
+        FileTree.Count > 0 &&
+        CountFiles().selected > 0;
+
+    // ── Constructeur ─────────────────────────────────────────────────────────
 
     public RestoreViewModel(RestoreEngine restoreEngine)
     {
         _restoreEngine = restoreEngine;
+
+        // Mettre à jour HasFileTree, SelectionSummary et CanStart quand
+        // des nœuds sont ajoutés/retirés de la collection racine.
+        FileTree.CollectionChanged += OnFileTreeCollectionChanged;
+    }
+
+    // ── Réaction aux changements de SourceFolder ──────────────────────────────
+
+    /// <summary>
+    /// Déclenché automatiquement quand SourceFolder change.
+    /// Vide l'arborescence existante et lance le rechargement asynchrone.
+    /// </summary>
+    partial void OnSourceFolderChanged(string value)
+    {
+        ClearFileTree();
+        if (!string.IsNullOrWhiteSpace(value) && Directory.Exists(value))
+            _ = LoadFileTreeAsync(value);
     }
 
     // ── Commandes ─────────────────────────────────────────────────────────────
 
-    /// <summary>Lance la restauration selon les paramètres saisis.</summary>
+    /// <summary>Sélectionne tous les fichiers de l'arborescence.</summary>
+    [RelayCommand]
+    private void SelectAll()
+    {
+        foreach (var node in FileTree)
+            node.SetIsChecked(true, propagateDown: true, propagateUp: false);
+        // Notifier la sélection manuellement (pas de propagation vers parent = pas de notification auto)
+        RefreshSelectionUI();
+    }
+
+    /// <summary>Désélectionne tous les fichiers de l'arborescence.</summary>
+    [RelayCommand]
+    private void DeselectAll()
+    {
+        foreach (var node in FileTree)
+            node.SetIsChecked(false, propagateDown: true, propagateUp: false);
+        RefreshSelectionUI();
+    }
+
+    /// <summary>Lance la restauration selon les paramètres et la sélection.</summary>
     [RelayCommand(CanExecute = nameof(CanStart))]
     private async Task StartRestoreAsync(CancellationToken ct)
     {
@@ -88,13 +176,23 @@ public partial class RestoreViewModel : ViewModelBase
 
         try
         {
+            // Dériver la clé AES-256 si chiffrement activé, puis effacer le mot de passe
             byte[]? key = null;
             if (IsEncrypted)
             {
-                // Dériver la clé à partir du mot de passe — même algorithme que la sauvegarde
                 key = RestoreEngine.DeriveKey(Password);
-                // Effacer le mot de passe de la mémoire dès que possible
                 Password = string.Empty;
+            }
+
+            // Construire l'ensemble des chemins sélectionnés pour la restauration sélective.
+            // HashSet avec OrdinalIgnoreCase pour une correspondance robuste sur Windows.
+            HashSet<string>? includedPaths = null;
+            if (FileTree.Count > 0)
+            {
+                includedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var node in FileTree)
+                    foreach (var path in node.GetSelectedRelativePaths())
+                        includedPaths.Add(path);
             }
 
             var options = new RestoreEngine.RestoreOptions(
@@ -102,7 +200,8 @@ public partial class RestoreViewModel : ViewModelBase
                 DestinationFolder: DestinationFolder,
                 IsEncrypted: IsEncrypted,
                 DecryptionKey: key,
-                Overwrite: Overwrite);
+                Overwrite: Overwrite,
+                IncludedPaths: includedPaths);
 
             var progress = new Progress<RestoreEngine.RestoreProgress>(p =>
             {
@@ -148,5 +247,159 @@ public partial class RestoreViewModel : ViewModelBase
         {
             SetBusy(false);
         }
+    }
+
+    // ── Chargement de l'arborescence ─────────────────────────────────────────
+
+    /// <summary>
+    /// Charge asynchronement l'arborescence du dossier source.
+    /// La construction de l'arbre est effectuée en arrière-plan (Task.Run)
+    /// pour ne pas bloquer le thread UI.
+    /// </summary>
+    private async Task LoadFileTreeAsync(string sourceFolder)
+    {
+        IsLoadingTree = true;
+        try
+        {
+            List<FileTreeNode> roots;
+            try
+            {
+                roots = await Task.Run(() => BuildTree(sourceFolder));
+            }
+            catch (Exception ex)
+            {
+                // Dossier inaccessible ou erreur I/O : afficher le résultat vide
+                _ = ex; // loggé implicitement via le résultat vide
+                IsLoadingTree = false;
+                return;
+            }
+
+            // Ajouter les nœuds sur le thread UI et s'abonner à leurs changements
+            foreach (var node in roots)
+            {
+                node.PropertyChanged += OnRootNodePropertyChanged;
+                FileTree.Add(node);
+            }
+        }
+        finally
+        {
+            IsLoadingTree = false;
+        }
+    }
+
+    /// <summary>
+    /// Construit l'arborescence complète d'un dossier de manière récursive.
+    /// Dossiers en premier (triés), puis fichiers (triés).
+    /// Le dossier <c>.winback_recycle</c> est exclu (corbeille interne WinBack).
+    /// </summary>
+    private static List<FileTreeNode> BuildTree(string rootPath)
+    {
+        var roots = new List<FileTreeNode>();
+        BuildTreeRecursive(rootPath, rootPath, parent: null, target: roots);
+        return roots;
+    }
+
+    private static void BuildTreeRecursive(
+        string rootPath, string currentPath,
+        FileTreeNode? parent, IList<FileTreeNode> target)
+    {
+        // Dossiers d'abord (triés par nom, insensible à la casse)
+        foreach (var dir in Directory.EnumerateDirectories(currentPath)
+                                     .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase))
+        {
+            var name = Path.GetFileName(dir);
+
+            // Ignorer la corbeille interne WinBack
+            if (string.Equals(name, ".winback_recycle", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var relPath = Path.GetRelativePath(rootPath, dir);
+            var node = new FileTreeNode(name, relPath, isDirectory: true, sizeBytes: 0, parent);
+            BuildTreeRecursive(rootPath, dir, node, node.Children);
+            target.Add(node);
+        }
+
+        // Fichiers ensuite (triés par nom)
+        foreach (var file in Directory.EnumerateFiles(currentPath)
+                                      .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase))
+        {
+            var name = Path.GetFileName(file);
+            var relPath = Path.GetRelativePath(rootPath, file);
+            var size = new FileInfo(file).Length;
+            target.Add(new FileTreeNode(name, relPath, isDirectory: false, sizeBytes: size, parent));
+        }
+    }
+
+    // ── Gestion de la sélection ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Appelé quand un nœud racine change son état IsChecked.
+    /// Comme la propagation est ascendante jusqu'à la racine, ce handler est
+    /// déclenché lors de tout changement dans le sous-arbre (y compris les feuilles).
+    /// </summary>
+    private void OnRootNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(FileTreeNode.IsChecked)) return;
+        RefreshSelectionUI();
+    }
+
+    /// <summary>
+    /// Notifie l'UI que la sélection a changé (résumé + état du bouton Restaurer).
+    /// </summary>
+    private void RefreshSelectionUI()
+    {
+        OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(CanStart));
+        StartRestoreCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Met à jour HasFileTree, SelectionSummary et CanStart quand
+    /// des nœuds sont ajoutés ou retirés de la collection racine.
+    /// </summary>
+    private void OnFileTreeCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasFileTree));
+        OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(CanStart));
+        StartRestoreCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Vide l'arborescence et se désabonne des événements des nœuds racines
+    /// pour éviter les fuites mémoire.
+    /// </summary>
+    private void ClearFileTree()
+    {
+        foreach (var node in FileTree)
+            node.PropertyChanged -= OnRootNodePropertyChanged;
+        FileTree.Clear();
+        ShowResult = false;
+    }
+
+    // ── Comptage des fichiers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Retourne le nombre de fichiers sélectionnés et le total.
+    /// Parcourt l'arbre une seule fois pour les deux valeurs.
+    /// </summary>
+    private (int selected, int total) CountFiles()
+    {
+        int selected = 0, total = 0;
+        foreach (var node in FileTree)
+            CountFilesRecursive(node, ref selected, ref total);
+        return (selected, total);
+    }
+
+    private static void CountFilesRecursive(FileTreeNode node, ref int selected, ref int total)
+    {
+        if (!node.IsDirectory)
+        {
+            total++;
+            if (node.IsChecked == true) selected++;
+            return;
+        }
+        foreach (var child in node.Children)
+            CountFilesRecursive(child, ref selected, ref total);
     }
 }

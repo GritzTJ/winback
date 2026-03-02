@@ -27,12 +27,18 @@ public class RestoreEngine
     /// <param name="IsEncrypted">Vrai si les fichiers source sont chiffrés AES-256 (format WinBack).</param>
     /// <param name="DecryptionKey">Clé AES-256 (32 octets). Obligatoire si <paramref name="IsEncrypted"/> est vrai.</param>
     /// <param name="Overwrite">Si faux, les fichiers déjà présents à la destination sont ignorés.</param>
+    /// <param name="IncludedPaths">
+    /// Ensemble des chemins relatifs à restaurer (restauration sélective).
+    /// Si <c>null</c> ou vide, tous les fichiers sont restaurés.
+    /// Les chemins sont comparés sans tenir compte de la casse.
+    /// </param>
     public record RestoreOptions(
         string SourceFolder,
         string DestinationFolder,
         bool IsEncrypted,
         byte[]? DecryptionKey = null,
-        bool Overwrite = true);
+        bool Overwrite = true,
+        IReadOnlySet<string>? IncludedPaths = null);
 
     /// <summary>Progression d'une restauration en cours.</summary>
     public record RestoreProgress(string CurrentFile, int FilesProcessed, int TotalFiles);
@@ -67,6 +73,16 @@ public class RestoreEngine
             .EnumerateFiles(options.SourceFolder, "*", SearchOption.AllDirectories)
             .Where(f => !f.Contains(Path.DirectorySeparatorChar + ".winback_recycle" + Path.DirectorySeparatorChar))
             .ToList();
+
+        // Restauration sélective : filtrer selon les chemins sélectionnés par l'utilisateur.
+        // Le HashSet est créé avec StringComparer.OrdinalIgnoreCase (insensible à la casse)
+        // pour assurer la correspondance sur tous les systèmes de fichiers Windows.
+        if (options.IncludedPaths is { Count: > 0 } included)
+        {
+            files = files
+                .Where(f => included.Contains(Path.GetRelativePath(options.SourceFolder, f)))
+                .ToList();
+        }
 
         int total = files.Count;
         int restored = 0, skipped = 0, errored = 0;

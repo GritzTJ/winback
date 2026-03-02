@@ -5,8 +5,8 @@
         xmlns:conv="clr-namespace:WinBack.App.Converters"
         xmlns:ctrl="clr-namespace:WinBack.App.Controls"
         Title="WinBack — Restaurer une sauvegarde"
-        Width="580" SizeToContent="Height"
-        MinWidth="480"
+        Width="620" SizeToContent="Height" MaxHeight="860"
+        MinWidth="500"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Style="{StaticResource MainWindowStyle}">
@@ -14,12 +14,19 @@
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
+
+        <!-- Style des éléments de l'arborescence : tous développés par défaut -->
+        <Style TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="True"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
     </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="56"/>   <!-- En-tête -->
-            <RowDefinition Height="*"/>    <!-- Contenu -->
+            <RowDefinition Height="*"/>    <!-- Contenu scrollable -->
         </Grid.RowDefinitions>
 
         <!-- ── En-tête ──────────────────────────────────────────────────── -->
@@ -41,13 +48,14 @@
                 <TextBlock Style="{StaticResource TextBody}"
                            Foreground="{StaticResource TextSecondaryBrush}"
                            TextWrapping="Wrap"
-                           Text="Choisissez le dossier de sauvegarde source (tel qu'il apparaît sur le disque externe) et le dossier de destination sur cette machine. La structure des sous-dossiers est préservée."/>
+                           Text="Choisissez le dossier de sauvegarde source, sélectionnez les fichiers à restaurer, puis indiquez le dossier de destination."/>
 
-                <!-- Dossier source -->
+                <!-- ── 1. Dossier source ─────────────────────────────────── -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel ctrl:StackPanelEx.Spacing="12">
                         <TextBlock Text="Dossiers" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
 
+                        <!-- Source -->
                         <StackPanel ctrl:StackPanelEx.Spacing="6">
                             <TextBlock Text="Dossier source (sur le disque de sauvegarde)"
                                        Style="{StaticResource TextCaption}"/>
@@ -67,6 +75,7 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- Destination -->
                         <StackPanel ctrl:StackPanelEx.Spacing="6">
                             <TextBlock Text="Dossier de destination (sur cette machine)"
                                        Style="{StaticResource TextCaption}"/>
@@ -88,7 +97,96 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Options chiffrement + écrasement -->
+                <!-- ── 2. Chargement de l'arborescence (spinner) ────────── -->
+                <StackPanel Visibility="{Binding IsLoadingTree, Converter={StaticResource BoolVis}}"
+                            ctrl:StackPanelEx.Spacing="6">
+                    <TextBlock Text="Chargement de l'arborescence…"
+                               Style="{StaticResource TextCaption}"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ProgressBar Style="{StaticResource ProgressBarStyle}"
+                                 IsIndeterminate="True" Height="4"/>
+                </StackPanel>
+
+                <!-- ── 3. Sélection des fichiers (visible quand arbre chargé) ── -->
+                <Border Style="{StaticResource Card}"
+                        Visibility="{Binding HasFileTree, Converter={StaticResource BoolVis}}">
+                    <StackPanel ctrl:StackPanelEx.Spacing="10">
+
+                        <!-- En-tête de la section : titre + boutons Tout / Rien -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="Sélection des fichiers"
+                                           Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding SelectionSummary}"
+                                           Style="{StaticResource TextCaption}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        ctrl:StackPanelEx.Spacing="8" VerticalAlignment="Center">
+                                <Button Content="Tout sélectionner"
+                                        Style="{StaticResource ButtonSecondary}"
+                                        Command="{Binding SelectAllCommand}"/>
+                                <Button Content="Tout désélectionner"
+                                        Style="{StaticResource ButtonSecondary}"
+                                        Command="{Binding DeselectAllCommand}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Arborescence de fichiers -->
+                        <TreeView ItemsSource="{Binding FileTree}"
+                                  MaxHeight="280"
+                                  BorderThickness="1"
+                                  BorderBrush="{StaticResource BorderBrush}"
+                                  Padding="4"
+                                  ScrollViewer.CanContentScroll="False">
+
+                            <TreeView.ItemTemplate>
+                                <!-- HierarchicalDataTemplate : gère récursivement les dossiers et fichiers -->
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal"
+                                                ctrl:StackPanelEx.Spacing="5"
+                                                Margin="0,1">
+                                        <!-- CheckBox tri-state :
+                                             - true  = sélectionné (sera restauré)
+                                             - false = désélectionné
+                                             - null  = partiellement sélectionné (dossiers)
+                                             IsThreeState permet l'affichage indéterminé ;
+                                             le setter de FileTreeNode.IsChecked convertit
+                                             null → true pour éviter un état indéterminé manuel. -->
+                                        <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                  IsThreeState="True"
+                                                  VerticalAlignment="Center"/>
+
+                                        <!-- Icône textuelle (📁 ou 📄) -->
+                                        <TextBlock Text="{Binding Icon}"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="13"/>
+
+                                        <!-- Nom du fichier ou dossier -->
+                                        <TextBlock Text="{Binding Name}"
+                                                   VerticalAlignment="Center"
+                                                   Style="{StaticResource TextBody}"/>
+
+                                        <!-- Taille (masquée pour les dossiers) -->
+                                        <TextBlock Text="{Binding FormattedSize}"
+                                                   VerticalAlignment="Center"
+                                                   Style="{StaticResource TextCaption}"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Visibility="{Binding IsDirectory, Converter={StaticResource InvBoolVis}}"/>
+                                    </StackPanel>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── 4. Options chiffrement + écrasement ───────────────── -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel ctrl:StackPanelEx.Spacing="12">
                         <TextBlock Text="Options" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
@@ -115,7 +213,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Résultat (visible après restauration) -->
+                <!-- ── 5. Résultat (visible après restauration) ──────────── -->
                 <Border Style="{StaticResource Card}"
                         Visibility="{Binding ShowResult, Converter={StaticResource BoolVis}}">
                     <StackPanel ctrl:StackPanelEx.Spacing="8">
@@ -128,7 +226,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Spinner progression -->
+                <!-- Spinner progression restauration -->
                 <StackPanel Visibility="{Binding IsBusy, Converter={StaticResource BoolVis}}"
                             ctrl:StackPanelEx.Spacing="6">
                     <TextBlock Text="{Binding StatusMessage}"
@@ -139,7 +237,7 @@
                                  IsIndeterminate="True" Height="4"/>
                 </StackPanel>
 
-                <!-- Bouton lancer -->
+                <!-- Bouton Restaurer -->
                 <Button Content="🔄 Restaurer"
                         Style="{StaticResource ButtonPrimary}"
                         HorizontalAlignment="Right"

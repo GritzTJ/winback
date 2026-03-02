@@ -20,6 +20,15 @@ public class BackupOrchestrator
     private readonly HashSet<int> _interruptedProfiles = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>
+    /// Callback appelé par la couche App pour demander le mot de passe de chiffrement
+    /// avant de démarrer une sauvegarde chiffrée.
+    /// Retourne la clé AES-256 dérivée (32 octets) si l'utilisateur a saisi un mot de passe,
+    /// ou null si l'utilisateur a annulé (la sauvegarde est alors abandonnée).
+    /// Doit être assigné par App.xaml.cs après construction de l'orchestrateur.
+    /// </summary>
+    public Func<BackupProfile, Task<byte[]?>>? RequestEncryptionKeyAsync { get; set; }
+
     public event EventHandler<BackupStartedEventArgs>? BackupStarted;
     public event EventHandler<BackupCompletedEventArgs>? BackupCompleted;
     public event EventHandler<NewDriveEventArgs>? UnknownDriveInserted;
@@ -103,12 +112,29 @@ public class BackupOrchestrator
 
     /// <summary>
     /// Démarre une sauvegarde pour un profil et un disque donnés.
+    /// Si le profil a le chiffrement activé, appelle <see cref="RequestEncryptionKeyAsync"/>
+    /// pour demander le mot de passe à l'utilisateur avant de démarrer.
     /// </summary>
     public async Task StartBackupAsync(BackupProfile profile, DriveDetails drive, bool dryRun = false)
     {
         // Charger les paramètres avant d'entrer dans le verrou
         var settings = await _profiles.GetSettingsAsync();
-        var options = new BackupEngineOptions(settings.MaxRetryCount, settings.RetryDelayMs);
+
+        // Si le profil est chiffré, demander la clé à l'utilisateur AVANT de prendre le verrou.
+        // Si l'utilisateur annule (retourne null), on abandonne silencieusement.
+        byte[]? encryptionKey = null;
+        if (profile.EnableEncryption && RequestEncryptionKeyAsync != null)
+        {
+            encryptionKey = await RequestEncryptionKeyAsync(profile);
+            if (encryptionKey == null)
+            {
+                _logger.LogInformation(
+                    "Sauvegarde annulée : mot de passe non fourni pour {Profile}", profile.Name);
+                return;
+            }
+        }
+
+        var options = new BackupEngineOptions(settings.MaxRetryCount, settings.RetryDelayMs, encryptionKey);
 
         // Le CTS est capturé dans une variable locale avant de relâcher le verrou
         // pour éviter la race condition avec CancelBackupAsync.

@@ -73,9 +73,4 @@ public partial class ProfileEditorWindow : Window
             _vm.RemovePairCommand.Execute(pairVm);
     }
 
-    private void PasswordBoxEncryption_Changed(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is ProfileEditorViewModel vm)
-            vm.EncryptionPassword = ((System.Windows.Controls.PasswordBox)sender).Password;
-    }
 }

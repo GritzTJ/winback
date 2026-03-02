@@ -45,6 +45,9 @@
 
                 <!-- Actions -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" ctrl:StackPanelEx.Spacing="8">
+                    <Button Content="🔄 Restaurer" Style="{StaticResource ButtonSecondary}"
+                            Click="OpenRestore_Click"
+                            ToolTip="Restaurer une sauvegarde vers un dossier de destination"/>
                     <Button Content="Historique" Style="{StaticResource ButtonSecondary}"
                             Click="OpenHistory_Click"/>
                     <Button Content="⚙ Paramètres" Style="{StaticResource ButtonIcon}"

@@ -20,8 +20,9 @@
 - **Reprise sur interruption** : si le disque est retiré pendant la sauvegarde, l'exécution est marquée `Interrupted` (distincte d'une annulation manuelle)
 - **Support VSS** (Volume Shadow Copy) pour copier les fichiers ouverts (PST Outlook, bases de données…)
 - **Vérification d'intégrité** optionnelle par hash MD5 post-copie
-- **Chiffrement AES-256** par profil : les fichiers copiés sur le disque de sauvegarde sont chiffrés (IV aléatoire par fichier, clé protégée par DPAPI)
+- **Chiffrement AES-256** par profil : les fichiers copiés sur le disque de sauvegarde sont chiffrés (IV aléatoire par fichier, clé dérivée du mot de passe — portable entre machines, aucun stockage du mot de passe)
 - **Audit d'intégrité à la demande** : vérifie que les fichiers sauvegardés correspondent aux snapshots (détecte les fichiers manquants ou corrompus)
+- **Restauration intégrée** : restaure un dossier de sauvegarde (chiffré ou non) vers n'importe quel dossier de destination, sur n'importe quelle machine avec le même mot de passe
 - **Notifications cliquables** : cliquer sur le ballon de notification ouvre directement l'historique
 - **Mode simulation (dry run)** pour prévisualiser sans modifier aucun fichier
 - **Interface simplifiée** (assistant 4 étapes) et **mode avancé** optionnel
@@ -58,7 +59,7 @@ WinBack.sln
     ├── BackupPairTests              Glob patterns et filtres d'exclusion
     ├── DiffCalculatorTests          Calcul diff (ajouts, modifs, suppressions, exclusions)
     ├── BackupRunTests               Propriétés calculées (Duration, TotalFiles, statuts)
-    ├── BackupEngineEncryptionTests  Chiffrement AES-256 (DeriveKey, roundtrip)
+    ├── BackupEngineEncryptionTests  Chiffrement AES-256 (DeriveKey, roundtrip chiffrement/déchiffrement)
     └── AuditTests                   Audit d'intégrité (OK, manquant, corrompu)
 ```
 
@@ -111,7 +112,7 @@ Le script `build.ps1` génère l'exécutable et/ou l'installateur.
 |---|---|---|---|
 | `.\build.ps1` | `publish\WinBack.exe` | ~15–20 Mo | .NET 9 Runtime installé |
 | `.\build.ps1 -SelfContained` | `publish\WinBack.exe` | ~80–100 Mo | Aucun |
-| `.\build.ps1 -Installer` | `installer\output\WinBack-0.3.0-Setup.exe` | ~80–100 Mo | Aucun |
+| `.\build.ps1 -Installer` | `installer\output\WinBack-0.3.1-Setup.exe` | ~80–100 Mo | Aucun |
 | `.\build.ps1 -Clean` | (nettoyage avant build) | — | — |
 
 ```powershell
@@ -129,7 +130,7 @@ Aucun — si Inno Setup 6 n'est pas détecté, `build.ps1` le télécharge et l'
 
 #### Installation via le setup
 
-Lancer `WinBack-0.3.0-Setup.exe` et suivre l'assistant. Options proposées :
+Lancer `WinBack-0.3.1-Setup.exe` et suivre l'assistant. Options proposées :
 
 - Raccourci sur le bureau (décoché par défaut)
 - Démarrage automatique avec Windows (coché par défaut)
@@ -161,7 +162,6 @@ Elle contient les profils de sauvegarde, les snapshots d'état des fichiers (uti
 | `CommunityToolkit.Mvvm 8.x` | ObservableObject, RelayCommand |
 | `H.NotifyIcon.Wpf 2.x` | Icône barre système (tray) |
 | `System.Management 9.x` | WMI (identification disques, VSS) |
-| `System.Security.Cryptography.ProtectedData 9.x` | Protection DPAPI de la clé de chiffrement |
 | `xunit 2.x` | Tests unitaires (WinBack.Tests) |
 
 ### Licence
@@ -188,8 +188,9 @@ MIT
 - **Interruption detection**: if the drive is removed during a backup, the run is marked `Interrupted` (distinct from a manual cancellation)
 - **VSS support** (Volume Shadow Copy) to copy open files (Outlook PST, databases…)
 - **Optional integrity check** via MD5 hash after copy
-- **AES-256 encryption** per profile: files copied to the backup drive are encrypted (random IV per file, key protected by DPAPI)
+- **AES-256 encryption** per profile: files copied to the backup drive are encrypted (random IV per file, key derived from password — portable across machines, password never stored)
 - **On-demand integrity audit**: verifies that backed-up files match their snapshots (detects missing or corrupted files)
+- **Built-in restore**: restores a backup folder (encrypted or not) to any destination folder, on any machine with the same password
 - **Clickable notifications**: clicking the balloon notification opens the history window directly
 - **Dry run mode** to preview changes without modifying any files
 - **Simplified interface** (4-step wizard) with optional **advanced mode**
@@ -226,7 +227,7 @@ WinBack.sln
     ├── BackupPairTests              Glob patterns and exclusion filters
     ├── DiffCalculatorTests          Diff computation (added, modified, deleted, excluded)
     ├── BackupRunTests               Computed properties (Duration, TotalFiles, statuses)
-    ├── BackupEngineEncryptionTests  AES-256 encryption (DeriveKey, roundtrip)
+    ├── BackupEngineEncryptionTests  AES-256 encryption (DeriveKey, encrypt/decrypt roundtrip)
     └── AuditTests                   Integrity audit (ok, missing, corrupted)
 ```
 
@@ -279,7 +280,7 @@ The `build.ps1` script produces the executable and/or the installer.
 |---|---|---|---|
 | `.\build.ps1` | `publish\WinBack.exe` | ~15–20 MB | .NET 9 Runtime installed |
 | `.\build.ps1 -SelfContained` | `publish\WinBack.exe` | ~80–100 MB | None |
-| `.\build.ps1 -Installer` | `installer\output\WinBack-0.3.0-Setup.exe` | ~80–100 MB | None |
+| `.\build.ps1 -Installer` | `installer\output\WinBack-0.3.1-Setup.exe` | ~80–100 MB | None |
 | `.\build.ps1 -Clean` | (clean before build) | — | — |
 
 ```powershell
@@ -297,7 +298,7 @@ None — if Inno Setup 6 is not detected, `build.ps1` downloads and installs it 
 
 #### Installing via the setup wizard
 
-Run `WinBack-0.3.0-Setup.exe` and follow the wizard. Optional steps:
+Run `WinBack-0.3.1-Setup.exe` and follow the wizard. Optional steps:
 
 - Desktop shortcut (unchecked by default)
 - Start automatically with Windows (checked by default)
@@ -329,7 +330,6 @@ It stores backup profiles, file state snapshots (used for incremental diff compu
 | `CommunityToolkit.Mvvm 8.x` | ObservableObject, RelayCommand |
 | `H.NotifyIcon.Wpf 2.x` | System tray icon |
 | `System.Management 9.x` | WMI (drive identification, VSS) |
-| `System.Security.Cryptography.ProtectedData 9.x` | DPAPI protection for encryption key |
 | `xunit 2.x` | Unit tests (WinBack.Tests) |
 
 ### License

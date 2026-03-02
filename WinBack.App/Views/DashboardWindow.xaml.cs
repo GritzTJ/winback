@@ -26,6 +26,14 @@ public partial class DashboardWindow : Window
         Hide();
     }
 
+    private void OpenRestore_Click(object sender, RoutedEventArgs e)
+    {
+        // RestoreWindow est Transient : une nouvelle instance à chaque ouverture
+        var win = App.GetService<RestoreWindow>();
+        win.Owner = this;
+        win.ShowDialog();
+    }
+
     private void OpenHistory_Click(object sender, RoutedEventArgs e)
     {
         var win = App.GetService<HistoryWindow>();

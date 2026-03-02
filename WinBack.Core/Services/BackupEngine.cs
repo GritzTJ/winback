@@ -14,7 +14,21 @@ public record BackupProgress(
 
 public enum BackupPhase { Scanning, Copying, Deleting, Verifying, Done }
 
-public record BackupEngineOptions(int MaxRetryCount = 0, int RetryDelayMs = 500);
+/// <summary>
+/// Options de comportement pour une exécution de sauvegarde.
+/// </summary>
+/// <param name="MaxRetryCount">Nombre max de tentatives en cas d'erreur de copie (0 = aucun retry).</param>
+/// <param name="RetryDelayMs">Délai en ms entre deux tentatives.</param>
+/// <param name="EncryptionKey">
+/// Clé AES-256 (32 octets) dérivée du mot de passe utilisateur via <see cref="RestoreEngine.DeriveKey"/>.
+/// Null si le chiffrement est désactivé pour ce profil.
+/// La clé est calculée par la couche App (après saisie du mot de passe) et passée ici :
+/// elle n'est jamais stockée en base de données.
+/// </param>
+public record BackupEngineOptions(
+    int MaxRetryCount = 0,
+    int RetryDelayMs = 500,
+    byte[]? EncryptionKey = null);
 
 /// <summary>
 /// Moteur de sauvegarde incrémentielle. Gère le cycle complet :
@@ -190,15 +204,12 @@ public class BackupEngine
                     {
                         try
                         {
-                            if (profile.EnableEncryption && profile.EncryptionKeyProtected != null)
-                            {
-                                var key = DeriveKey(GetPassword(profile.EncryptionKeyProtected));
-                                await CopyAndEncryptFileAsync(vssFile, destFile, key, ct);
-                            }
+                            // Si le profil est chiffré, la clé a été fournie par l'orchestrateur
+                            // (saisie du mot de passe lors de la connexion du disque).
+                            if (profile.EnableEncryption && options.EncryptionKey != null)
+                                await CopyAndEncryptFileAsync(vssFile, destFile, options.EncryptionKey, ct);
                             else
-                            {
                                 await CopyFileAsync(vssFile, destFile, ct);
-                            }
                             break;
                         }
                         catch (Exception ex) when (attempt < options.MaxRetryCount && !ct.IsCancellationRequested)
@@ -351,20 +362,6 @@ public class BackupEngine
         if (!string.Equals(hashSource, hashDest, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Vérification d'intégrité échouée : {Path.GetFileName(source)}");
         return hashSource;
-    }
-
-    private static byte[] DeriveKey(string password)
-    {
-        return System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(password));
-    }
-
-    private static string GetPassword(string protectedBase64)
-    {
-        var data = System.Security.Cryptography.ProtectedData.Unprotect(
-            Convert.FromBase64String(protectedBase64), null,
-            System.Security.Cryptography.DataProtectionScope.CurrentUser);
-        return System.Text.Encoding.UTF8.GetString(data);
     }
 
     private static async Task CopyAndEncryptFileAsync(string source, string dest, byte[] key, CancellationToken ct)

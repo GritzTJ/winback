@@ -46,11 +46,12 @@ public class BackupProfile
     /// <summary>Démarrer la sauvegarde automatiquement sans confirmation.</summary>
     public bool AutoStart { get; set; } = true;
 
-    /// <summary>Chiffrer les fichiers copiés (AES-256-CBC, clé dérivée du mot de passe).</summary>
+    /// <summary>
+    /// Chiffrer les fichiers copiés (AES-256-CBC, clé dérivée du mot de passe).
+    /// Le mot de passe est demandé à l'utilisateur lors de chaque connexion du disque :
+    /// il n'est jamais stocké sur disque, ce qui garantit la portabilité inter-machines.
+    /// </summary>
     public bool EnableEncryption { get; set; } = false;
-
-    /// <summary>Mot de passe chiffré par DPAPI (base64). Null si chiffrement désactivé.</summary>
-    public string? EncryptionKeyProtected { get; set; }
 
     public List<BackupPair> Pairs { get; set; } = [];
     public List<BackupRun> Runs { get; set; } = [];

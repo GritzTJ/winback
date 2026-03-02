@@ -62,6 +62,23 @@ public partial class App : Application
         // Abonnement aux événements d'orchestration
         var orchestrator = _host.Services.GetRequiredService<BackupOrchestrator>();
         orchestrator.UnknownDriveInserted += OnUnknownDriveInserted;
+
+        // Câbler la demande de mot de passe pour les sauvegardes chiffrées :
+        // ce callback est invoqué par l'orchestrateur sur le thread appelant (non-UI),
+        // donc on utilise Dispatcher.Invoke pour afficher la fenêtre sur le thread UI.
+        orchestrator.RequestEncryptionKeyAsync = profile =>
+        {
+            byte[]? key = null;
+            Dispatcher.Invoke(() =>
+            {
+                var promptWindow = GetService<PasswordPromptWindow>();
+                promptWindow.Owner = GetOrCreateDashboard();
+                promptWindow.InitForProfile(profile.Name);
+                if (promptWindow.ShowDialog() == true)
+                    key = promptWindow.DerivedKey;
+            });
+            return Task.FromResult(key);
+        };
         orchestrator.BackupStarted += (_, args) =>
         {
             if (args.RequiresConfirmation)
@@ -91,6 +108,7 @@ public partial class App : Application
                 services.AddSingleton<ProfileService>();
                 services.AddSingleton<DiffCalculator>();
                 services.AddSingleton<BackupEngine>();
+                services.AddSingleton<RestoreEngine>();
 
                 // ── Services App ────────────────────────────────────────────
                 services.AddSingleton<NotificationService>();
@@ -103,12 +121,15 @@ public partial class App : Application
                 services.AddTransient<ProfileEditorViewModel>();
                 services.AddTransient<HistoryViewModel>();
                 services.AddTransient<SettingsViewModel>();
+                services.AddTransient<RestoreViewModel>();
 
                 // ── Vues ────────────────────────────────────────────────────
                 services.AddTransient<DashboardWindow>();
                 services.AddTransient<ProfileEditorWindow>();
                 services.AddTransient<HistoryWindow>();
                 services.AddTransient<SettingsWindow>();
+                services.AddTransient<RestoreWindow>();
+                services.AddTransient<PasswordPromptWindow>();
             })
             .ConfigureLogging(logging =>
             {

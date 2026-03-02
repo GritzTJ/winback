@@ -56,6 +56,10 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _clickableNotifications = true;
 
+    /// <summary>Patterns globaux, un par ligne (binding TextBox multi-lignes).</summary>
+    [ObservableProperty]
+    private string _globalExcludePatterns = string.Empty;
+
     /// <summary>Vrai si le retry est activé (MaxRetryCount > 0).</summary>
     public bool IsRetryEnabled => MaxRetryCount > 0;
 
@@ -98,6 +102,7 @@ public partial class SettingsViewModel : ViewModelBase
         MaxRetryCount          = s.MaxRetryCount;
         RetryDelayMs           = s.RetryDelayMs;
         ClickableNotifications = s.ClickableNotifications;
+        GlobalExcludePatterns  = string.Join(Environment.NewLine, s.GlobalExcludePatterns);
 
         // La source de vérité pour le démarrage automatique est le registre,
         // pas la base de données (l'utilisateur peut avoir modifié le registre manuellement)
@@ -125,7 +130,11 @@ public partial class SettingsViewModel : ViewModelBase
                 LogDirectory  = LogDirectory == GetDefaultLogDirectory() ? null : LogDirectory,
                 MaxRetryCount          = MaxRetryCount,
                 RetryDelayMs           = RetryDelayMs,
-                ClickableNotifications = ClickableNotifications
+                ClickableNotifications = ClickableNotifications,
+                GlobalExcludePatterns  = GlobalExcludePatterns
+                    .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(l => !string.IsNullOrWhiteSpace(l))
+                    .ToList()
             };
             await _profileService.SaveSettingsAsync(s);
             ApplyStartupSetting(StartWithWindows);
@@ -202,4 +211,21 @@ public partial class SettingsViewModel : ViewModelBase
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "WinBack", "Logs");
+
+    // ── Exclusions globales ──────────────────────────────────────────────────────
+
+    private static readonly string CommonSuggestions =
+        "*.tmp\n*.bak\n~$*\nThumbs.db\ndesktop.ini\n.DS_Store\n.git\n.svn\n.hg\nnode_modules\n__pycache__\n*.log\n*.pyc";
+
+    /// <summary>Fusionne les suggestions communes avec les patterns déjà saisis (déduplique).</summary>
+    [RelayCommand]
+    private void ApplySuggestions()
+    {
+        var existing = GlobalExcludePatterns
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in CommonSuggestions.Split('\n'))
+            existing.Add(s);
+        GlobalExcludePatterns = string.Join(Environment.NewLine, existing.Order());
+    }
 }

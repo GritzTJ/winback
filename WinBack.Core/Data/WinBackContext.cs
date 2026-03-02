@@ -65,6 +65,7 @@ public class WinBackContext : DbContext
         modelBuilder.Entity<AppSettings>(e =>
         {
             e.HasKey(x => x.Id);
+            e.Ignore(x => x.GlobalExcludePatterns);
             e.HasData(new AppSettings { Id = 1 });
         });
     }
@@ -103,6 +104,7 @@ public class WinBackContext : DbContext
             "ALTER TABLE AppSettings ADD COLUMN ClickableNotifications INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE Profiles ADD COLUMN EnableEncryption INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE Profiles ADD COLUMN EncryptionKeyProtected TEXT NULL",
+            "ALTER TABLE AppSettings ADD COLUMN GlobalExcludePatternsJson TEXT NOT NULL DEFAULT '[]'",
         };
         foreach (var sql in migrations)
         {

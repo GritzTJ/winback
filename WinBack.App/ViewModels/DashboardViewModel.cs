@@ -30,6 +30,15 @@ public partial class DashboardViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasProfiles;
 
+    /// <summary>Progression globale (0.0–1.0) agrégée de tous les profils en cours.</summary>
+    [ObservableProperty]
+    private double _overallProgress;
+
+    /// <summary>État de la barre de progression dans la barre des tâches.</summary>
+    [ObservableProperty]
+    private System.Windows.Shell.TaskbarItemProgressState _taskbarProgressState
+        = System.Windows.Shell.TaskbarItemProgressState.None;
+
     public DashboardViewModel(ProfileService profileService, BackupOrchestrator orchestrator)
     {
         _profileService = profileService;
@@ -94,6 +103,21 @@ public partial class DashboardViewModel : ViewModelBase
         await LoadAsync();
     }
 
+    private void RecalcOverallProgress()
+    {
+        var running = Profiles.Where(p => p.IsRunning).ToList();
+        if (running.Count == 0)
+        {
+            TaskbarProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
+            OverallProgress = 0;
+            return;
+        }
+        OverallProgress = running.Average(p => p.ProgressPercent) / 100.0;
+        TaskbarProgressState = running.All(p => p.IsPaused)
+            ? System.Windows.Shell.TaskbarItemProgressState.Paused
+            : System.Windows.Shell.TaskbarItemProgressState.Normal;
+    }
+
     /// <summary>
     /// Appelé par l'orchestrateur quand une sauvegarde démarre.
     /// Met à jour la carte correspondante avec l'indicateur de progression.
@@ -115,6 +139,7 @@ public partial class DashboardViewModel : ViewModelBase
                     ? (int)(e.Progress.FilesProcessed * 100.0 / e.Progress.TotalFiles)
                     : 0;
             }
+            RecalcOverallProgress();
         });
     }
 
@@ -137,6 +162,7 @@ public partial class DashboardViewModel : ViewModelBase
                     card.IsPaused      = false; // garantir la réinitialisation si annulée en pause
                     card.LastRunStatus = e.Run.Status;
                     card.LastRunDate   = e.Run.FinishedAt;
+                    RecalcOverallProgress();
                 });
             }
 

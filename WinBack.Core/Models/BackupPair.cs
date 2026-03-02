@@ -43,7 +43,20 @@ public class BackupPair
         return false;
     }
 
-    private static bool MatchesGlob(string text, string pattern)
+    /// <summary>Vérifie si un chemin relatif est exclu par une liste de patterns globaux.</summary>
+    public static bool IsExcludedByPatterns(string relativePath, IReadOnlyList<string> patterns)
+    {
+        if (patterns.Count == 0) return false;
+        var fileName = Path.GetFileName(relativePath);
+        foreach (var pattern in patterns)
+        {
+            if (MatchesGlob(fileName, pattern) || MatchesGlob(relativePath, pattern))
+                return true;
+        }
+        return false;
+    }
+
+    internal static bool MatchesGlob(string text, string pattern)
     {
         // Conversion simple glob → regex via itération
         int pi = 0, ti = 0, starPi = -1, starTi = -1;

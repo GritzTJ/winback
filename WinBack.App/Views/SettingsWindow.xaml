@@ -137,6 +137,35 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ── Exclusions globales ─────────────────────────────── -->
+                <TextBlock Text="Exclusions globales" Style="{StaticResource TextSubtitle}"/>
+                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                    <StackPanel ctrl:StackPanelEx.Spacing="10">
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock Text="Patterns d'exclusion globaux" Style="{StaticResource TextBody}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Appliqués à toutes les paires de tous les profils. Un pattern par ligne."
+                                           Style="{StaticResource TextCaption}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Content="Suggestions communes" HorizontalAlignment="Right"
+                                    Style="{StaticResource ButtonIcon}"
+                                    Command="{Binding ApplySuggestionsCommand}"
+                                    ToolTip="Ajouter les exclusions courantes (*.tmp, node_modules, .git…)"/>
+                        </Grid>
+                        <TextBox Text="{Binding GlobalExcludePatterns, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="NoWrap"
+                                 Height="130"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 Style="{StaticResource TextBoxStyle}"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ── À propos ──────────────────────────────────────────── -->
                 <TextBlock Text="À propos" Style="{StaticResource TextSubtitle}"/>
                 <Border Style="{StaticResource Card}">

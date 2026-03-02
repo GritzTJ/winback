@@ -36,4 +36,15 @@ public class AppSettings
 
     /// <summary>Cliquer sur une notification ouvre la fenêtre d'historique.</summary>
     public bool ClickableNotifications { get; set; } = true;
+
+    /// <summary>Patterns d'exclusion globaux (JSON array), appliqués à toutes les paires de tous les profils.</summary>
+    public string GlobalExcludePatternsJson { get; set; } = "[]";
+
+    // Propriété calculée, non mappée en base
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<string> GlobalExcludePatterns
+    {
+        get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(GlobalExcludePatternsJson) ?? [];
+        set => GlobalExcludePatternsJson = System.Text.Json.JsonSerializer.Serialize(value);
+    }
 }

@@ -34,6 +34,7 @@ accessibles sans internet même en cas de catastrophe.
 - **Support VSS** — copie les fichiers ouverts (boîtes mail Outlook, bases de données, fichiers verrouillés…)
 - **Trois stratégies** — miroir strict, corbeille avec rétention configurable, ou accumulation sans suppression
 - **Filtres d'exclusion** — patterns glob (`*.tmp`, `~$*`, `node_modules/**`…) pour ignorer ce qui ne compte pas
+- **Exclusions globales** — définissez une liste de patterns dans les Paramètres : ils s'appliquent automatiquement à tous les profils et toutes les paires, avec un bouton "Suggestions communes" pour démarrer vite
 - **Retry automatique** — en cas d'erreur de copie, WinBack réessaie avant de déclarer l'échec
 - **Aperçu avant sauvegarde** — voyez exactement ce qui va changer (X ajouts, Y modifications, Z suppressions) sans toucher un seul fichier
 
@@ -61,6 +62,7 @@ accessibles sans internet même en cas de catastrophe.
 
 #### Rester informé
 - **Notifications Windows** — un ballon système à chaque fin de sauvegarde ; cliquez dessus pour ouvrir l'historique directement
+- **Barre de progression dans la barre des tâches** — la progression de la sauvegarde est visible directement sur l'icône dans la barre des tâches Windows (verte en cours, jaune en pause), même si la fenêtre est fermée
 - **Historique détaillé** — chaque exécution est enregistrée avec le nombre de fichiers traités, les erreurs, et la durée
 - **Démarrage automatique** avec Windows — WinBack est prêt dès l'ouverture de session
 
@@ -196,6 +198,7 @@ if you choose, and accessible without internet even when things go wrong.
 - **VSS support** — copies open files (Outlook mail, databases, locked files…)
 - **Three strategies** — strict mirror, recycle bin with configurable retention, or additive (never delete)
 - **Exclusion filters** — glob patterns (`*.tmp`, `~$*`, `node_modules/**`…) to skip what doesn't matter
+- **Global exclusions** — define a list of patterns in Settings that apply automatically to all profiles and all pairs, with a "Common suggestions" button to get started quickly
 - **Automatic retry** — on copy error, WinBack retries before declaring failure
 - **Backup preview** — see exactly what will change (X additions, Y modifications, Z deletions) without touching a single file
 
@@ -223,6 +226,7 @@ if you choose, and accessible without internet even when things go wrong.
 
 #### Stay informed
 - **Windows notifications** — a system balloon after every backup; click it to open the history directly
+- **Taskbar progress bar** — backup progress is visible directly on the taskbar icon (green while running, yellow when paused), even when the window is closed
 - **Detailed history** — every run is recorded with file counts, errors, and duration
 - **Auto-start with Windows** — WinBack is ready the moment you log in
 

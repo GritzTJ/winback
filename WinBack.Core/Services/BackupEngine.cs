@@ -34,7 +34,8 @@ public record BackupEngineOptions(
     int MaxRetryCount = 0,
     int RetryDelayMs = 500,
     byte[]? EncryptionKey = null,
-    ManualResetEventSlim? PauseHandle = null);
+    ManualResetEventSlim? PauseHandle = null,
+    IReadOnlyList<string>? GlobalExcludePatterns = null);
 
 /// <summary>
 /// Moteur de sauvegarde incrémentielle. Gère le cycle complet :
@@ -152,7 +153,7 @@ public class BackupEngine
 
         // Calculer le diff
         progress?.Report(new BackupProgress("Analyse en cours…", 0, 0, run.BytesTransferred, BackupPhase.Scanning));
-        var diff = _differ.Compute(sourcePath, snapshots, pair);
+        var diff = _differ.Compute(sourcePath, snapshots, pair, options.GlobalExcludePatterns);
 
         _logger.LogInformation("Diff paire {PairId}: +{A} ~{M} -{D}",
             pair.Id, diff.Added.Count, diff.Modified.Count, diff.Deleted.Count);
@@ -475,7 +476,9 @@ public class BackupEngine
     /// avaient leur source accessible (0 = disque source déconnecté).
     /// </returns>
     public async Task<BackupPreviewResult> PreviewAsync(
-        BackupProfile profile, CancellationToken ct = default)
+        BackupProfile profile,
+        IReadOnlyList<string>? globalExcludePatterns = null,
+        CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
@@ -493,7 +496,7 @@ public class BackupEngine
                 .Where(s => s.ProfileId == profile.Id && s.PairId == pair.Id)
                 .ToListAsync(ct);
 
-            var diff = _differ.Compute(pair.SourcePath, snapshots, pair);
+            var diff = _differ.Compute(pair.SourcePath, snapshots, pair, globalExcludePatterns);
             added    += diff.Added.Count;
             modified += diff.Modified.Count;
             deleted  += diff.Deleted.Count;

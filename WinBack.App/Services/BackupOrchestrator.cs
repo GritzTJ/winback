@@ -164,7 +164,8 @@ public class BackupOrchestrator
         }
 
         var options = new BackupEngineOptions(
-            settings.MaxRetryCount, settings.RetryDelayMs, encryptionKey, pauseHandle);
+            settings.MaxRetryCount, settings.RetryDelayMs, encryptionKey, pauseHandle,
+            settings.GlobalExcludePatterns);
 
         // Si on arrive ici, cts est forcément non-null (le return ci-dessus l'aurait stoppé).
         try
@@ -296,7 +297,8 @@ public class BackupOrchestrator
     {
         var profile = await _profiles.GetProfileByIdAsync(profileId)
             ?? throw new InvalidOperationException($"Profil {profileId} introuvable.");
-        return await _engine.PreviewAsync(profile, ct);
+        var settings = await _profiles.GetSettingsAsync();
+        return await _engine.PreviewAsync(profile, settings.GlobalExcludePatterns, ct);
     }
 
     public async Task<AuditResult> RunAuditAsync(int profileId, string destRoot, CancellationToken ct = default)

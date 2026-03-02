@@ -15,6 +15,7 @@ public class DiffCalculator
         string sourcePath,
         IReadOnlyList<FileSnapshot> existingSnapshots,
         BackupPair pair,
+        IReadOnlyList<string>? globalExcludePatterns = null,
         IProgress<string>? progress = null)
     {
         var added = new List<string>();
@@ -38,7 +39,7 @@ public class DiffCalculator
         var foundPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         progress?.Report($"Analyse de {sourcePath}…");
-        ScanDirectory(sourcePath, sourcePath, pair, snapshotIndex, foundPaths, added, modified, progress);
+        ScanDirectory(sourcePath, sourcePath, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress);
 
         // Fichiers présents dans le snapshot mais absents du scan → Supprimés
         foreach (var snap in existingSnapshots)
@@ -54,6 +55,7 @@ public class DiffCalculator
         string rootPath,
         string currentPath,
         BackupPair pair,
+        IReadOnlyList<string>? globalExcludePatterns,
         Dictionary<string, FileSnapshot> snapshotIndex,
         HashSet<string> foundPaths,
         List<string> added,
@@ -72,12 +74,13 @@ public class DiffCalculator
         {
             var relativePath = Path.GetRelativePath(rootPath, entry);
 
-            if (pair.IsExcluded(relativePath))
+            if (pair.IsExcluded(relativePath) ||
+                (globalExcludePatterns?.Count > 0 && BackupPair.IsExcludedByPatterns(relativePath, globalExcludePatterns)))
                 continue;
 
             if (Directory.Exists(entry))
             {
-                ScanDirectory(rootPath, entry, pair, snapshotIndex, foundPaths, added, modified, progress);
+                ScanDirectory(rootPath, entry, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress);
             }
             else
             {

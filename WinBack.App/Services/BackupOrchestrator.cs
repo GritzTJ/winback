@@ -15,8 +15,9 @@ public class BackupOrchestrator
     private readonly NotificationService _notifications;
     private readonly ILogger<BackupOrchestrator> _logger;
 
-    // Annulations actives par profil
-    private readonly Dictionary<int, CancellationTokenSource> _activeTasks = new();
+    // Annulations actives par profil (avec lettre de lecteur pour détecter le retrait du disque)
+    private readonly Dictionary<int, (CancellationTokenSource Cts, char DriveLetter)> _activeTasks = new();
+    private readonly HashSet<int> _interruptedProfiles = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public event EventHandler<BackupStartedEventArgs>? BackupStarted;
@@ -37,30 +38,67 @@ public class BackupOrchestrator
 
     /// <summary>
     /// Appelé par UsbMonitorService lorsqu'un disque est inséré.
+    /// Démarre automatiquement toutes les sauvegardes dont AutoStart est activé.
     /// </summary>
     public async Task OnDriveInsertedAsync(DriveDetails drive)
     {
-        var profile = await _profiles.GetByVolumeGuidAsync(drive.VolumeGuid);
+        var profiles = await _profiles.GetAllByVolumeGuidAsync(drive.VolumeGuid);
 
-        if (profile == null)
+        if (profiles.Count == 0)
         {
             _logger.LogInformation("Disque inconnu : {Label} ({Guid})", drive.Label, drive.VolumeGuid);
             UnknownDriveInserted?.Invoke(this, new NewDriveEventArgs(drive));
-            _notifications.NotifyNewDrive(drive.Label, drive.DriveLetter + ":\\");
+            var settings = await _profiles.GetSettingsAsync();
+            if (settings.ShowNotifications)
+                _notifications.NotifyNewDrive(drive.Label, drive.DriveLetter + ":\\");
             return;
         }
 
-        _logger.LogInformation("Profil trouvé : {Profile} pour {Drive}", profile.Name, drive.DriveLetter);
+        var tasks = new List<Task>();
+        foreach (var profile in profiles)
+        {
+            _logger.LogInformation("Profil trouvé : {Profile} pour {Drive}", profile.Name, drive.DriveLetter);
+            if (profile.AutoStart)
+            {
+                tasks.Add(StartBackupAsync(profile, drive));
+            }
+            else
+            {
+                BackupStarted?.Invoke(this, new BackupStartedEventArgs(profile, drive, requiresConfirmation: true));
+            }
+        }
+        await Task.WhenAll(tasks);
+    }
 
-        if (profile.AutoStart)
+    /// <summary>
+    /// Appelé par UsbMonitorService lorsqu'un disque est retiré.
+    /// Annule toutes les sauvegardes en cours pour ce lecteur et les marque comme interrompues.
+    /// </summary>
+    public async Task OnDriveRemovedAsync(char driveLetter)
+    {
+        List<int> profileIds;
+        await _lock.WaitAsync();
+        try
         {
-            await StartBackupAsync(profile, drive);
+            profileIds = _activeTasks
+                .Where(kvp => kvp.Value.DriveLetter == driveLetter)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var id in profileIds)
+            {
+                await _activeTasks[id].Cts.CancelAsync();
+                _interruptedProfiles.Add(id);
+            }
         }
-        else
+        finally
         {
-            // Demander confirmation via événement
-            BackupStarted?.Invoke(this, new BackupStartedEventArgs(profile, drive, requiresConfirmation: true));
+            _lock.Release();
         }
+
+        if (profileIds.Count > 0)
+            _logger.LogInformation("Disque {Drive} retiré — {Count} sauvegarde(s) interrompue(s)",
+                driveLetter, profileIds.Count);
     }
 
     /// <summary>
@@ -68,6 +106,10 @@ public class BackupOrchestrator
     /// </summary>
     public async Task StartBackupAsync(BackupProfile profile, DriveDetails drive, bool dryRun = false)
     {
+        // Charger les paramètres avant d'entrer dans le verrou
+        var settings = await _profiles.GetSettingsAsync();
+        var options = new BackupEngineOptions(settings.MaxRetryCount, settings.RetryDelayMs);
+
         // Le CTS est capturé dans une variable locale avant de relâcher le verrou
         // pour éviter la race condition avec CancelBackupAsync.
         CancellationTokenSource? cts = null;
@@ -82,7 +124,7 @@ public class BackupOrchestrator
             }
 
             cts = new CancellationTokenSource();
-            _activeTasks[profile.Id] = cts;
+            _activeTasks[profile.Id] = (cts, drive.DriveLetter);
         }
         finally
         {
@@ -92,7 +134,8 @@ public class BackupOrchestrator
         // Si on arrive ici, cts est forcément non-null (le return ci-dessus l'aurait stoppé).
         try
         {
-            _notifications.NotifyDriveDetected(profile.Name);
+            if (settings.ShowNotifications)
+                _notifications.NotifyDriveDetected(profile.Name);
             BackupStarted?.Invoke(this, new BackupStartedEventArgs(profile, drive, requiresConfirmation: false));
 
             // Délai configurable avant démarrage (laisser le disque s'initialiser)
@@ -106,9 +149,26 @@ public class BackupOrchestrator
                     requiresConfirmation: false) { Progress = p });
             });
 
-            var run = await _engine.RunAsync(profile, destRoot, progress, dryRun, cts!.Token);
+            var run = await _engine.RunAsync(profile, destRoot, progress, dryRun, cts!.Token, options);
 
-            _notifications.NotifyBackupComplete(run, profile.Name);
+            // Vérifier si l'annulation est due au retrait du disque → statut Interrupted
+            if (run.Status == BackupRunStatus.Cancelled)
+            {
+                bool wasInterrupted;
+                await _lock.WaitAsync();
+                try { wasInterrupted = _interruptedProfiles.Remove(profile.Id); }
+                finally { _lock.Release(); }
+
+                if (wasInterrupted)
+                {
+                    await _profiles.UpdateRunStatusAsync(run.Id, BackupRunStatus.Interrupted);
+                    run.Status = BackupRunStatus.Interrupted;
+                    _logger.LogInformation("Sauvegarde interrompue (disque retiré) : {Profile}", profile.Name);
+                }
+            }
+
+            if (settings.ShowNotifications)
+                _notifications.NotifyBackupComplete(run, profile.Name);
             BackupCompleted?.Invoke(this, new BackupCompletedEventArgs(profile, run));
         }
         catch (OperationCanceledException)
@@ -118,12 +178,14 @@ public class BackupOrchestrator
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erreur lors de la sauvegarde {Profile}", profile.Name);
-            _notifications.NotifyError($"{profile.Name} : {ex.Message}");
+            if (settings.ShowNotifications)
+                _notifications.NotifyError($"{profile.Name} : {ex.Message}");
         }
         finally
         {
             await _lock.WaitAsync();
             _activeTasks.Remove(profile.Id);
+            _interruptedProfiles.Remove(profile.Id);
             _lock.Release();
             cts?.Dispose();
         }
@@ -137,8 +199,8 @@ public class BackupOrchestrator
         await _lock.WaitAsync();
         try
         {
-            if (_activeTasks.TryGetValue(profileId, out var cts))
-                await cts.CancelAsync();
+            if (_activeTasks.TryGetValue(profileId, out var entry))
+                await entry.Cts.CancelAsync();
         }
         finally
         {

@@ -14,6 +14,8 @@ public record BackupProgress(
 
 public enum BackupPhase { Scanning, Copying, Deleting, Verifying, Done }
 
+public record BackupEngineOptions(int MaxRetryCount = 0, int RetryDelayMs = 500);
+
 /// <summary>
 /// Moteur de sauvegarde incrémentielle. Gère le cycle complet :
 /// scan diff → copie VSS → suppression → mise à jour des snapshots.
@@ -47,7 +49,8 @@ public class BackupEngine
         string destRootPath,
         IProgress<BackupProgress>? progress = null,
         bool dryRun = false,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        BackupEngineOptions? options = null)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
@@ -64,6 +67,7 @@ public class BackupEngine
         _logger.LogInformation("Démarrage sauvegarde profil {ProfileName} (DryRun={DryRun})",
             profile.Name, dryRun);
 
+        options ??= new BackupEngineOptions();
         using var vssManager = profile.EnableVss ? new VssSessionManager() : null;
 
         try
@@ -72,7 +76,7 @@ public class BackupEngine
             {
                 ct.ThrowIfCancellationRequested();
                 await ProcessPairAsync(profile, pair, destRootPath, run, vssManager,
-                    progress, dryRun, db, ct);
+                    progress, dryRun, options, db, ct);
             }
 
             run.Status = run.FilesErrored > 0 ? BackupRunStatus.PartialSuccess : BackupRunStatus.Success;
@@ -108,6 +112,7 @@ public class BackupEngine
         VssSessionManager? vssManager,
         IProgress<BackupProgress>? progress,
         bool dryRun,
+        BackupEngineOptions options,
         WinBackContext db,
         CancellationToken ct)
     {
@@ -177,7 +182,23 @@ public class BackupEngine
                 {
                     var destDir = Path.GetDirectoryName(destFile)!;
                     Directory.CreateDirectory(destDir);
-                    await CopyFileAsync(vssFile, destFile, ct);
+
+                    int attempt = 0;
+                    while (true)
+                    {
+                        try
+                        {
+                            await CopyFileAsync(vssFile, destFile, ct);
+                            break;
+                        }
+                        catch (Exception ex) when (attempt < options.MaxRetryCount && !ct.IsCancellationRequested)
+                        {
+                            attempt++;
+                            _logger.LogWarning("Retry {Attempt}/{Max} pour {File} : {Error}",
+                                attempt, options.MaxRetryCount, relativePath, ex.Message);
+                            await Task.Delay(options.RetryDelayMs, ct);
+                        }
+                    }
 
                     if (profile.EnableHashVerification)
                     {

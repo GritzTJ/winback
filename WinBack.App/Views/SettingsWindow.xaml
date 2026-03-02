@@ -110,6 +110,30 @@
                     </Border>
                 </StackPanel>
 
+                <!-- ── Sauvegarde ────────────────────────────────────────── -->
+                <TextBlock Text="Sauvegarde" Style="{StaticResource TextSubtitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel ctrl:StackPanelEx.Spacing="14">
+                        <StackPanel ctrl:StackPanelEx.Spacing="6">
+                            <TextBlock Text="Tentatives en cas d'erreur de copie" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                            <ComboBox SelectedIndex="{Binding MaxRetryCount}"
+                                      FontFamily="Segoe UI Variable Text, Segoe UI"
+                                      FontSize="13">
+                                <ComboBoxItem Content="0 — Aucune (désactivé)"/>
+                                <ComboBoxItem Content="1 tentative"/>
+                                <ComboBoxItem Content="2 tentatives"/>
+                                <ComboBoxItem Content="3 tentatives"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel ctrl:StackPanelEx.Spacing="6"
+                                    Visibility="{Binding IsRetryEnabled, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="Délai entre tentatives (ms)" Style="{StaticResource TextCaption}" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding RetryDelayMs, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource TextBoxStyle}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- ── À propos ──────────────────────────────────────────── -->
                 <TextBlock Text="À propos" Style="{StaticResource TextSubtitle}"/>
                 <Border Style="{StaticResource Card}">

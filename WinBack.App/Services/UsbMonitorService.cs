@@ -113,6 +113,7 @@ public class UsbMonitorService : IHostedService
             {
                 _logger.LogInformation("Disque retiré : {Drive}", drivePath);
                 DriveRemoved?.Invoke(this, new DriveEventArgs(letter, drivePath, null));
+                Task.Run(() => _orchestrator.OnDriveRemovedAsync(letter));
             }
         }
 

@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinBack.Core", "WinBack.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinBack.App", "WinBack.App\WinBack.App.csproj", "{B2C3D4E5-F6A7-5B6C-9D0E-1F2A3B4C5D6E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinBack.Tests", "WinBack.Tests\WinBack.Tests.csproj", "{C3D4E5F6-A7B8-6C7D-0E1F-2A3B4C5D6E7F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,10 @@ Global
 		{B2C3D4E5-F6A7-5B6C-9D0E-1F2A3B4C5D6E}.Debug|x64.Build.0 = Debug|x64
 		{B2C3D4E5-F6A7-5B6C-9D0E-1F2A3B4C5D6E}.Release|x64.ActiveCfg = Release|x64
 		{B2C3D4E5-F6A7-5B6C-9D0E-1F2A3B4C5D6E}.Release|x64.Build.0 = Release|x64
+		{C3D4E5F6-A7B8-6C7D-0E1F-2A3B4C5D6E7F}.Debug|x64.ActiveCfg = Debug|x64
+		{C3D4E5F6-A7B8-6C7D-0E1F-2A3B4C5D6E7F}.Debug|x64.Build.0 = Debug|x64
+		{C3D4E5F6-A7B8-6C7D-0E1F-2A3B4C5D6E7F}.Release|x64.ActiveCfg = Release|x64
+		{C3D4E5F6-A7B8-6C7D-0E1F-2A3B4C5D6E7F}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

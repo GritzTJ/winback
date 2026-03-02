@@ -6,6 +6,7 @@ public enum BackupRunStatus
     Success,
     PartialSuccess,
     Cancelled,
+    Interrupted,
     Error
 }
 

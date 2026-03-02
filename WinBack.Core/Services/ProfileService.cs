@@ -35,6 +35,15 @@ public class ProfileService
             .FirstOrDefaultAsync(p => p.VolumeGuid == volumeGuid && p.IsActive);
     }
 
+    public async Task<List<BackupProfile>> GetAllByVolumeGuidAsync(string volumeGuid)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.Profiles
+            .Include(p => p.Pairs)
+            .Where(p => p.VolumeGuid == volumeGuid && p.IsActive)
+            .ToListAsync();
+    }
+
     public async Task<BackupProfile> CreateProfileAsync(BackupProfile profile)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
@@ -87,6 +96,13 @@ public class ProfileService
             db.Pairs.Remove(pair);
             await db.SaveChangesAsync();
         }
+    }
+
+    public async Task UpdateRunStatusAsync(int runId, BackupRunStatus status)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var run = await db.Runs.FindAsync(runId);
+        if (run != null) { run.Status = status; await db.SaveChangesAsync(); }
     }
 
     // ── Historique ───────────────────────────────────────────────────────────

@@ -43,6 +43,18 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _logLevel = 3;
 
+    /// <summary>Nombre de tentatives en cas d'erreur de copie (0 = désactivé).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRetryEnabled))]
+    private int _maxRetryCount = 0;
+
+    /// <summary>Délai en ms entre deux tentatives de copie.</summary>
+    [ObservableProperty]
+    private int _retryDelayMs = 500;
+
+    /// <summary>Vrai si le retry est activé (MaxRetryCount > 0).</summary>
+    public bool IsRetryEnabled => MaxRetryCount > 0;
+
     /// <summary>Dossier de destination des fichiers de log. Null = dossier par défaut.</summary>
     [ObservableProperty]
     private string _logDirectory = string.Empty;
@@ -79,6 +91,8 @@ public partial class SettingsViewModel : ViewModelBase
         StartMinimized    = s.StartMinimized;
         LogLevel          = s.LogLevel;
         LogDirectory      = s.LogDirectory ?? GetDefaultLogDirectory();
+        MaxRetryCount     = s.MaxRetryCount;
+        RetryDelayMs      = s.RetryDelayMs;
 
         // La source de vérité pour le démarrage automatique est le registre,
         // pas la base de données (l'utilisateur peut avoir modifié le registre manuellement)
@@ -103,7 +117,9 @@ public partial class SettingsViewModel : ViewModelBase
                 StartMinimized    = StartMinimized,
                 LogLevel          = LogLevel,
                 // Ne persiste pas le chemin s'il correspond au chemin par défaut
-                LogDirectory = LogDirectory == GetDefaultLogDirectory() ? null : LogDirectory
+                LogDirectory  = LogDirectory == GetDefaultLogDirectory() ? null : LogDirectory,
+                MaxRetryCount = MaxRetryCount,
+                RetryDelayMs  = RetryDelayMs
             };
             await _profileService.SaveSettingsAsync(s);
             ApplyStartupSetting(StartWithWindows);

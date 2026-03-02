@@ -82,10 +82,28 @@ public class WinBackContext : DbContext
     }
 
     /// <summary>
-    /// Initialise la base de données (création + migrations).
+    /// Initialise la base de données (création + migrations de schéma).
     /// </summary>
     public void Initialize()
     {
         Database.EnsureCreated();
+        MigrateSchemaIfNeeded();
+    }
+
+    /// <summary>
+    /// Applique les migrations de schéma nécessaires pour les bases existantes (0.1.x → 0.2.0).
+    /// Chaque ALTER est dans un try/catch individuel : SQLite échoue si la colonne existe déjà.
+    /// </summary>
+    private void MigrateSchemaIfNeeded()
+    {
+        var migrations = new[]
+        {
+            "ALTER TABLE AppSettings ADD COLUMN MaxRetryCount INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE AppSettings ADD COLUMN RetryDelayMs INTEGER NOT NULL DEFAULT 500",
+        };
+        foreach (var sql in migrations)
+        {
+            try { Database.ExecuteSqlRaw(sql); } catch { /* colonne déjà présente */ }
+        }
     }
 }

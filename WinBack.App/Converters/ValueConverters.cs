@@ -64,6 +64,7 @@ public class StatusToBrushConverter : IValueConverter
             BackupRunStatus.PartialSuccess => new SolidColorBrush(Color.FromRgb(216, 59, 1)),
             BackupRunStatus.Error => new SolidColorBrush(Color.FromRgb(197, 15, 31)),
             BackupRunStatus.Cancelled => new SolidColorBrush(Color.FromRgb(107, 107, 107)),
+            BackupRunStatus.Interrupted => new SolidColorBrush(Color.FromRgb(202, 80, 16)),
             BackupRunStatus.Running => new SolidColorBrush(Color.FromRgb(0, 120, 212)),
             _ => Brushes.Transparent
         };

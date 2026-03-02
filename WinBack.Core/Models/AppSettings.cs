@@ -27,4 +27,10 @@ public class AppSettings
 
     /// <summary>Langue de l'interface : "fr", "en". Null = langue système.</summary>
     public string? Language { get; set; }
+
+    /// <summary>Nombre de tentatives en cas d'erreur de copie (0 = pas de retry).</summary>
+    public int MaxRetryCount { get; set; } = 0;
+
+    /// <summary>Délai en ms entre deux tentatives de copie.</summary>
+    public int RetryDelayMs { get; set; } = 500;
 }

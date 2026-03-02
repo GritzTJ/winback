@@ -88,6 +88,7 @@ public class BackupRunDetailViewModel
         BackupRunStatus.PartialSuccess => "⚠",
         BackupRunStatus.Error          => "✗",
         BackupRunStatus.Cancelled      => "—",
+        BackupRunStatus.Interrupted    => "⏸",
         BackupRunStatus.Running        => "…",
         _                              => "?"
     };

@@ -124,7 +124,7 @@ public class BackupOrchestrator
             }
 
             cts = new CancellationTokenSource();
-            _activeTasks[profile.Id] = (cts, drive.DriveLetter);
+            _activeTasks[profile.Id] = (cts, drive.DriveLetter[0]);
         }
         finally
         {

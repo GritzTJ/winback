@@ -27,6 +27,12 @@ public partial class DashboardWindow : Window
         Hide();
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _vm.Cleanup();
+        base.OnClosed(e);
+    }
+
     private void OpenRestore_Click(object sender, RoutedEventArgs e)
     {
         // RestoreWindow est Transient : une nouvelle instance à chaque ouverture
@@ -55,12 +61,12 @@ public partial class DashboardWindow : Window
             _ = _vm.LoadCommand.ExecuteAsync(null);
     }
 
-    private void EditProfile_Click(object sender, RoutedEventArgs e)
+    private async void EditProfile_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: int profileId })
         {
             var win = App.GetService<ProfileEditorWindow>();
-            win.LoadProfileForEdit(profileId);
+            await win.LoadProfileForEditAsync(profileId);
             if (win.ShowDialog() == true)
                 _ = _vm.LoadCommand.ExecuteAsync(null);
         }
@@ -119,6 +125,14 @@ public partial class DashboardWindow : Window
 
         try
         {
+            // Limiter la taille du fichier importé (1 Mo max) pour éviter un DoS mémoire
+            var fileInfo = new FileInfo(dialog.FileName);
+            if (fileInfo.Length > 1_048_576)
+            {
+                MessageBox.Show("Le fichier est trop volumineux (max 1 Mo).",
+                    "WinBack — Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             var json = await File.ReadAllTextAsync(dialog.FileName);
             await _vm.ImportProfileAsync(json);
             MessageBox.Show("Profil importé avec succès.",

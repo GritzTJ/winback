@@ -23,6 +23,23 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        try
+        {
+            await InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Erreur critique au démarrage de WinBack :\n\n{ex.Message}",
+                "WinBack — Erreur fatale",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(1);
+        }
+    }
+
+    private async Task InitializeAsync()
+    {
         _host = BuildHost();
 
         // Initialiser la base de données AVANT de démarrer le host
@@ -49,7 +66,8 @@ public partial class App : Application
         _dashboard = GetService<DashboardWindow>();
         MainWindow = _dashboard;
 
-        var settings = await _host.Services.GetRequiredService<ProfileService>().GetSettingsAsync();
+        var profileService = _host.Services.GetRequiredService<ProfileService>();
+        var settings = await profileService.GetSettingsAsync();
 
         // Démarrer le host (lance UsbMonitorService.StartAsync qui accroche WM_DEVICECHANGE)
         await _host.StartAsync();
@@ -66,18 +84,31 @@ public partial class App : Application
         // Câbler la demande de mot de passe pour les sauvegardes chiffrées :
         // ce callback est invoqué par l'orchestrateur sur le thread appelant (non-UI),
         // donc on utilise Dispatcher.Invoke pour afficher la fenêtre sur le thread UI.
-        orchestrator.RequestEncryptionKeyAsync = profile =>
+        orchestrator.RequestEncryptionKeyAsync = async profile =>
         {
+            // Générer un sel PBKDF2 si le profil n'en a pas encore
+            byte[]? salt = null;
+            if (profile.EncryptionSalt != null)
+            {
+                salt = Convert.FromBase64String(profile.EncryptionSalt);
+            }
+            else
+            {
+                salt = RestoreEngine.GenerateSalt();
+                profile.EncryptionSalt = Convert.ToBase64String(salt);
+                await profileService.UpdateProfileAsync(profile);
+            }
+
             byte[]? key = null;
             Dispatcher.Invoke(() =>
             {
                 var promptWindow = GetService<PasswordPromptWindow>();
                 promptWindow.Owner = GetOrCreateDashboard();
-                promptWindow.InitForProfile(profile.Name);
+                promptWindow.InitForProfile(profile.Name, salt);
                 if (promptWindow.ShowDialog() == true)
                     key = promptWindow.DerivedKey;
             });
-            return Task.FromResult(key);
+            return key;
         };
         orchestrator.BackupStarted += (_, args) =>
         {
@@ -152,10 +183,17 @@ public partial class App : Application
     }
 
     private DashboardWindow? _dashboard;
+    private bool _dashboardClosedPermanently;
     private DashboardWindow GetOrCreateDashboard()
     {
-        if (_dashboard is null || !_dashboard.IsLoaded)
-            _dashboard = GetService<DashboardWindow>();
+        // Vérifier si la fenêtre a été fermée (Closing est annulé par Hide(),
+        // mais si elle a quand même été fermée, on en recrée une).
+        if (_dashboard is not null && !_dashboardClosedPermanently)
+            return _dashboard;
+
+        _dashboardClosedPermanently = false;
+        _dashboard = GetService<DashboardWindow>();
+        _dashboard.Closed += (_, _) => _dashboardClosedPermanently = true;
         return _dashboard;
     }
 

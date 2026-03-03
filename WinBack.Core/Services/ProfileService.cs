@@ -238,10 +238,35 @@ public class ProfileService
         if (!Enum.TryParse<BackupStrategy>(dto.Strategy, ignoreCase: true, out var strategy))
             throw new InvalidDataException($"Stratégie inconnue : {dto.Strategy}");
 
+        // Validation des champs importés
+        if (string.IsNullOrWhiteSpace(dto.Name) || dto.Name.Length > 200)
+            throw new InvalidDataException("Nom du profil invalide (vide ou > 200 caractères).");
+        if (string.IsNullOrWhiteSpace(dto.VolumeGuid) || dto.VolumeGuid.Length > 50)
+            throw new InvalidDataException("GUID de volume invalide.");
+        if (dto.RetentionDays < 0 || dto.RetentionDays > 3650)
+            throw new InvalidDataException($"Nombre de jours de rétention invalide : {dto.RetentionDays}");
+        if (dto.InsertionDelaySeconds < 0 || dto.InsertionDelaySeconds > 300)
+            throw new InvalidDataException($"Délai d'insertion invalide : {dto.InsertionDelaySeconds}");
+        if (dto.Pairs.Count > 100)
+            throw new InvalidDataException($"Trop de paires source/destination : {dto.Pairs.Count} (max 100).");
+
+        foreach (var p in dto.Pairs)
+        {
+            if (string.IsNullOrWhiteSpace(p.SourcePath))
+                throw new InvalidDataException("Chemin source vide dans une paire.");
+            // Refuser les chemins UNC (\\serveur\...) dans SourcePath pour empêcher
+            // une exfiltration de données vers un partage réseau contrôlé par l'attaquant.
+            if (p.SourcePath.TrimStart().StartsWith(@"\\"))
+                throw new InvalidDataException($"Chemin source UNC interdit : {p.SourcePath}");
+            // Refuser les chemins relatifs ou avec des séquences ".." dans DestRelativePath
+            if (!string.IsNullOrWhiteSpace(p.DestRelativePath) && p.DestRelativePath.Contains(".."))
+                throw new InvalidDataException($"Chemin de destination invalide (path traversal) : {p.DestRelativePath}");
+        }
+
         var profile = new BackupProfile
         {
-            Name           = dto.Name,
-            VolumeGuid     = dto.VolumeGuid,
+            Name           = dto.Name.Trim(),
+            VolumeGuid     = dto.VolumeGuid.Trim(),
             DiskLabel      = dto.DiskLabel,
             Strategy       = strategy,
             RetentionDays  = dto.RetentionDays,
@@ -252,8 +277,8 @@ public class ProfileService
             EnableEncryption = dto.EnableEncryption,
             Pairs = dto.Pairs.Select(p => new BackupPair
             {
-                SourcePath         = p.SourcePath,
-                DestRelativePath   = p.DestRelativePath,
+                SourcePath         = p.SourcePath.Trim(),
+                DestRelativePath   = p.DestRelativePath.Trim(),
                 ExcludePatternsJson = p.ExcludePatternsJson,
                 IsActive           = p.IsActive
             }).ToList()

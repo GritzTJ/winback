@@ -105,6 +105,7 @@ public class WinBackContext : DbContext
             "ALTER TABLE Profiles ADD COLUMN EnableEncryption INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE Profiles ADD COLUMN EncryptionKeyProtected TEXT NULL",
             "ALTER TABLE AppSettings ADD COLUMN GlobalExcludePatternsJson TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE Profiles ADD COLUMN EncryptionSalt TEXT NULL",
         };
         foreach (var sql in migrations)
         {

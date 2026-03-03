@@ -49,4 +49,16 @@ public partial class RestoreWindow : Window
         // Le PasswordBox ne supporte pas le binding direct : on passe par le code-behind.
         _vm.Password = ((System.Windows.Controls.PasswordBox)sender).Password;
     }
+
+    /// <summary>
+    /// Efface le PasswordBox lorsque la fenêtre se ferme pour ne pas laisser
+    /// le mot de passe en mémoire dans le contrôle WPF.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        if (FindName("PasswordBox") is System.Windows.Controls.PasswordBox pb)
+            pb.Clear();
+        _vm.Cleanup();
+        base.OnClosed(e);
+    }
 }

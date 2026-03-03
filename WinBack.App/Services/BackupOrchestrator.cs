@@ -1,3 +1,5 @@
+using System.IO;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WinBack.Core.Models;
 using WinBack.Core.Services;
@@ -170,6 +172,32 @@ public class BackupOrchestrator
         // Si on arrive ici, cts est forcément non-null (le return ci-dessus l'aurait stoppé).
         try
         {
+            // Écrire les métadonnées KDF dans chaque dossier de destination chiffré
+            // pour permettre la restauration cross-machine avec PBKDF2
+            if (profile.EnableEncryption && profile.EncryptionSalt != null)
+            {
+                var destRoot = drive.DriveLetter + ":\\";
+                foreach (var pair in profile.Pairs.Where(p => p.IsActive))
+                {
+                    try
+                    {
+                        var pairDest = Path.Combine(destRoot, pair.DestRelativePath);
+                        var kdfFile = Path.Combine(pairDest, RestoreEngine.KdfMetadataFileName);
+                        if (!File.Exists(kdfFile))
+                        {
+                            Directory.CreateDirectory(pairDest);
+                            var kdfMeta = new RestoreEngine.KdfMetadata(2, profile.EncryptionSalt, RestoreEngine.Pbkdf2Iterations);
+                            await File.WriteAllTextAsync(kdfFile, JsonSerializer.Serialize(kdfMeta,
+                                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Impossible d'écrire les métadonnées KDF pour {Pair}", pair.DestRelativePath);
+                    }
+                }
+            }
+
             if (settings.ShowNotifications)
                 _notifications.NotifyDriveDetected(profile.Name);
             BackupStarted?.Invoke(this, new BackupStartedEventArgs(profile, drive, requiresConfirmation: false));
@@ -229,6 +257,8 @@ public class BackupOrchestrator
             // pour ne pas bloquer le thread de pool qui attendait dessus.
             pauseHandle?.Set();
             pauseHandle?.Dispose();
+            // Effacer la clé de chiffrement de la mémoire
+            if (encryptionKey != null) Array.Clear(encryptionKey);
         }
     }
 
@@ -249,7 +279,12 @@ public class BackupOrchestrator
         }
     }
 
-    public bool IsBackupRunning(int profileId) => _activeTasks.ContainsKey(profileId);
+    public bool IsBackupRunning(int profileId)
+    {
+        _lock.Wait();
+        try { return _activeTasks.ContainsKey(profileId); }
+        finally { _lock.Release(); }
+    }
 
     /// <summary>
     /// Met en pause la sauvegarde en cours pour le profil indiqué.
@@ -286,7 +321,11 @@ public class BackupOrchestrator
     /// Vrai si la sauvegarde du profil est actuellement en pause.
     /// </summary>
     public bool IsBackupPaused(int profileId)
-        => _pauseHandles.TryGetValue(profileId, out var h) && !h.IsSet;
+    {
+        _lock.Wait();
+        try { return _pauseHandles.TryGetValue(profileId, out var h) && !h.IsSet; }
+        finally { _lock.Release(); }
+    }
 
     /// <summary>
     /// Calcule les changements qu'effectuerait la prochaine sauvegarde du profil

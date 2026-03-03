@@ -38,7 +38,7 @@ public partial class ProfileEditorWindow : Window
         TitleBlock.Text = "Configurer un nouveau disque";
     }
 
-    public async void LoadProfileForEdit(int profileId)
+    public async Task LoadProfileForEditAsync(int profileId)
     {
         var profiles = await _profileService.GetAllProfilesAsync();
         var profile = profiles.FirstOrDefault(p => p.Id == profileId);

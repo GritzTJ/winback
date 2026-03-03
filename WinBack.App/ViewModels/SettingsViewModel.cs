@@ -164,7 +164,7 @@ public partial class SettingsViewModel : ViewModelBase
             ? GetDefaultLogDirectory()
             : LogDirectory;
         if (Directory.Exists(dir))
-            System.Diagnostics.Process.Start("explorer.exe", dir);
+            TryOpenExplorer(dir);
     }
 
     /// <summary>Ouvre le dossier contenant la base de données SQLite dans l'Explorateur.</summary>
@@ -173,7 +173,16 @@ public partial class SettingsViewModel : ViewModelBase
     {
         var dir = Path.GetDirectoryName(DatabasePath);
         if (dir != null && Directory.Exists(dir))
-            System.Diagnostics.Process.Start("explorer.exe", dir);
+            TryOpenExplorer(dir);
+    }
+
+    private static void TryOpenExplorer(string path)
+    {
+        try { System.Diagnostics.Process.Start("explorer.exe", path); }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[Settings] Impossible d'ouvrir le dossier : {ex.Message}");
+        }
     }
 
     // ── Registre démarrage automatique ──────────────────────────────────────────

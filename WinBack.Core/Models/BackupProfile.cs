@@ -53,6 +53,13 @@ public class BackupProfile
     /// </summary>
     public bool EnableEncryption { get; set; } = false;
 
+    /// <summary>
+    /// Sel cryptographique (32 octets, base64) utilisé avec PBKDF2 pour dériver la clé AES-256.
+    /// Généré automatiquement lors de la première sauvegarde chiffrée.
+    /// Null pour les profils créés avant la v0.4.4 (legacy SHA-256 KDF).
+    /// </summary>
+    public string? EncryptionSalt { get; set; }
+
     public List<BackupPair> Pairs { get; set; } = [];
     public List<BackupRun> Runs { get; set; } = [];
     public List<FileSnapshot> Snapshots { get; set; } = [];

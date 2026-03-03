@@ -21,10 +21,23 @@ public class BackupPair
 
     public List<FileSnapshot> Snapshots { get; set; } = [];
 
+    private const int MaxPatternCount = 500;
+
     // Propriété calculée, non mappée en base
     public List<string> ExcludePatterns
     {
-        get => JsonSerializer.Deserialize<List<string>>(ExcludePatternsJson) ?? [];
+        get
+        {
+            try
+            {
+                var patterns = JsonSerializer.Deserialize<List<string>>(ExcludePatternsJson) ?? [];
+                return patterns.Count > MaxPatternCount ? patterns.GetRange(0, MaxPatternCount) : patterns;
+            }
+            catch (JsonException)
+            {
+                return [];
+            }
+        }
         set => ExcludePatternsJson = JsonSerializer.Serialize(value);
     }
 

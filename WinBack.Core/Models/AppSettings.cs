@@ -41,10 +41,23 @@ public class AppSettings
     public string GlobalExcludePatternsJson { get; set; } = "[]";
 
     // Propriété calculée, non mappée en base
+    private const int MaxPatternCount = 500;
+
     [System.Text.Json.Serialization.JsonIgnore]
     public List<string> GlobalExcludePatterns
     {
-        get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(GlobalExcludePatternsJson) ?? [];
+        get
+        {
+            try
+            {
+                var patterns = System.Text.Json.JsonSerializer.Deserialize<List<string>>(GlobalExcludePatternsJson) ?? [];
+                return patterns.Count > MaxPatternCount ? patterns.GetRange(0, MaxPatternCount) : patterns;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return [];
+            }
+        }
         set => GlobalExcludePatternsJson = System.Text.Json.JsonSerializer.Serialize(value);
     }
 }

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
+using System.Text.Json;
 using WinBack.Core.Services;
 
 namespace WinBack.App.ViewModels;
@@ -21,6 +22,7 @@ namespace WinBack.App.ViewModels;
 public partial class RestoreViewModel : ViewModelBase
 {
     private readonly RestoreEngine _restoreEngine;
+    private byte[]? _kdfSalt;
 
     // ── Dossiers ─────────────────────────────────────────────────────────────
 
@@ -134,6 +136,16 @@ public partial class RestoreViewModel : ViewModelBase
         FileTree.CollectionChanged += OnFileTreeCollectionChanged;
     }
 
+    /// <summary>
+    /// Libère les abonnements aux événements pour éviter les fuites mémoire.
+    /// Appelé par RestoreWindow lorsqu'elle se ferme.
+    /// </summary>
+    public void Cleanup()
+    {
+        ClearFileTree();
+        FileTree.CollectionChanged -= OnFileTreeCollectionChanged;
+    }
+
     // ── Réaction aux changements de SourceFolder ──────────────────────────────
 
     /// <summary>
@@ -143,8 +155,28 @@ public partial class RestoreViewModel : ViewModelBase
     partial void OnSourceFolderChanged(string value)
     {
         ClearFileTree();
+        _kdfSalt = null;
         if (!string.IsNullOrWhiteSpace(value) && Directory.Exists(value))
+        {
+            // Charger les métadonnées KDF si présentes (PBKDF2 v2)
+            TryLoadKdfMetadata(value);
             _ = LoadFileTreeAsync(value);
+        }
+    }
+
+    private void TryLoadKdfMetadata(string sourceFolder)
+    {
+        try
+        {
+            var kdfFile = Path.Combine(sourceFolder, RestoreEngine.KdfMetadataFileName);
+            if (!File.Exists(kdfFile)) return;
+            var json = File.ReadAllText(kdfFile);
+            var meta = JsonSerializer.Deserialize<RestoreEngine.KdfMetadata>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (meta != null && meta.KdfVersion >= 2 && !string.IsNullOrEmpty(meta.Salt))
+                _kdfSalt = Convert.FromBase64String(meta.Salt);
+        }
+        catch { /* Métadonnées KDF corrompues ou inaccessibles — utiliser le KDF legacy */ }
     }
 
     // ── Commandes ─────────────────────────────────────────────────────────────
@@ -181,7 +213,9 @@ public partial class RestoreViewModel : ViewModelBase
             byte[]? key = null;
             if (IsEncrypted)
             {
-                key = RestoreEngine.DeriveKey(Password);
+                key = _kdfSalt != null
+                    ? RestoreEngine.DeriveKeyV2(Password, _kdfSalt)
+                    : RestoreEngine.DeriveKey(Password);
                 Password = string.Empty;
             }
 
@@ -246,6 +280,7 @@ public partial class RestoreViewModel : ViewModelBase
         }
         finally
         {
+            if (key != null) Array.Clear(key);
             SetBusy(false);
         }
     }
@@ -305,8 +340,13 @@ public partial class RestoreViewModel : ViewModelBase
         FileTreeNode? parent, IList<FileTreeNode> target)
     {
         // Dossiers d'abord (triés par nom, insensible à la casse)
-        foreach (var dir in Directory.EnumerateDirectories(currentPath)
-                                     .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase))
+        IEnumerable<string> directories;
+        try { directories = Directory.EnumerateDirectories(currentPath); }
+        catch (UnauthorizedAccessException) { return; } // Dossier non accessible
+        catch (IOException) { return; } // Dossier disparu pendant l'énumération
+
+        foreach (var dir in directories
+                    .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase))
         {
             var name = Path.GetFileName(dir);
 
@@ -321,13 +361,22 @@ public partial class RestoreViewModel : ViewModelBase
         }
 
         // Fichiers ensuite (triés par nom)
-        foreach (var file in Directory.EnumerateFiles(currentPath)
-                                      .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase))
+        IEnumerable<string> files;
+        try { files = Directory.EnumerateFiles(currentPath); }
+        catch (UnauthorizedAccessException) { return; }
+        catch (IOException) { return; }
+
+        foreach (var file in files
+                    .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase))
         {
-            var name = Path.GetFileName(file);
-            var relPath = Path.GetRelativePath(rootPath, file);
-            var size = new FileInfo(file).Length;
-            target.Add(new FileTreeNode(name, relPath, isDirectory: false, sizeBytes: size, parent));
+            try
+            {
+                var name = Path.GetFileName(file);
+                var relPath = Path.GetRelativePath(rootPath, file);
+                var size = new FileInfo(file).Length;
+                target.Add(new FileTreeNode(name, relPath, isDirectory: false, sizeBytes: size, parent));
+            }
+            catch (IOException) { /* Fichier inaccessible, on l'ignore */ }
         }
     }
 

@@ -67,8 +67,8 @@ public class DiffCalculator
         {
             entries = Directory.EnumerateFileSystemEntries(currentPath);
         }
-        catch (UnauthorizedAccessException) { return; }
-        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; } // Dossier non accessible par l'utilisateur courant
+        catch (IOException) { return; } // Dossier disparu ou verrouillé pendant l'énumération
 
         foreach (var entry in entries)
         {
@@ -113,14 +113,14 @@ public class DiffCalculator
     }
 
     /// <summary>
-    /// Calcule le hash MD5 d'un fichier pour la vérification d'intégrité.
+    /// Calcule le hash SHA-256 d'un fichier pour la vérification d'intégrité.
     /// </summary>
     public static async Task<string> ComputeHashAsync(string filePath, CancellationToken ct = default)
     {
-        using var md5 = System.Security.Cryptography.MD5.Create();
+        using var sha = System.Security.Cryptography.SHA256.Create();
         await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read,
             FileShare.ReadWrite, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var hash = await md5.ComputeHashAsync(stream, ct);
+        var hash = await sha.ComputeHashAsync(stream, ct);
         return Convert.ToHexString(hash);
     }
 }

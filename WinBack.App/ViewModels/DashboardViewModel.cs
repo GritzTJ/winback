@@ -49,6 +49,16 @@ public partial class DashboardViewModel : ViewModelBase
         _orchestrator.BackupCompleted += OnBackupCompleted;
     }
 
+    /// <summary>
+    /// Désabonne des événements de l'orchestrateur pour éviter les fuites mémoire.
+    /// Appelé par DashboardWindow lorsqu'elle se ferme.
+    /// </summary>
+    public void Cleanup()
+    {
+        _orchestrator.BackupStarted -= OnBackupStarted;
+        _orchestrator.BackupCompleted -= OnBackupCompleted;
+    }
+
     /// <summary>Charge les profils et l'historique récent depuis la base de données.</summary>
     [RelayCommand]
     public async Task LoadAsync()
@@ -264,7 +274,8 @@ public partial class ProfileCardViewModel : ObservableObject
             await _orchestrator.ResumeBackupAsync(ProfileId);
         else
             await _orchestrator.PauseBackupAsync(ProfileId);
-        IsPaused = !IsPaused;
+        // Synchroniser l'état avec l'orchestrateur pour éviter une désynchronisation UI
+        IsPaused = _orchestrator.IsBackupPaused(ProfileId);
     }
 
     /// <summary>Calcule le diff de la prochaine sauvegarde sans rien écrire.</summary>

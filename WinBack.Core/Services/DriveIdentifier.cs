@@ -81,16 +81,22 @@ public static class DriveIdentifier
 
             foreach (ManagementObject ld in ldSearcher.Get())
             {
+                using (ld)
                 foreach (ManagementObject part in ld.GetRelated("Win32_DiskPartition"))
                 {
+                    using (part)
                     foreach (ManagementObject disk in part.GetRelated("Win32_DiskDrive"))
                     {
+                        using (disk)
                         return disk["SerialNumber"]?.ToString()?.Trim();
                     }
                 }
             }
         }
-        catch { /* WMI peut échouer si non admin */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[DriveIdentifier] Échec WMI GetDiskSerialNumber({driveLetter}) : {ex.Message}");
+        }
         return null;
     }
 
@@ -110,7 +116,7 @@ public static class DriveIdentifier
                 if (guid != null && string.Equals(guid, volumeGuid, StringComparison.OrdinalIgnoreCase))
                     return drive.Name;
             }
-            catch { /* drive peut disparaître pendant l'itération */ }
+            catch { /* drive peut disparaître pendant l'itération — bénin */ }
         }
         return null;
     }
@@ -131,7 +137,11 @@ public static class DriveIdentifier
                 Label: GetVolumeLabel(driveLetter) ?? driveLetter,
                 SerialNumber: GetDiskSerialNumber(driveLetter));
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[DriveIdentifier] Échec GetDriveDetails({driveLetter}) : {ex.Message}");
+            return null;
+        }
     }
 }
 

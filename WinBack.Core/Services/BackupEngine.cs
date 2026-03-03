@@ -207,8 +207,8 @@ public class BackupEngine
 
                 if (!dryRun)
                 {
-                    var destDir = Path.GetDirectoryName(destFile)!;
-                    Directory.CreateDirectory(destDir);
+                    var destDir = Path.GetDirectoryName(destFile);
+                    if (destDir != null) Directory.CreateDirectory(destDir);
 
                     int attempt = 0;
                     while (true)
@@ -314,7 +314,8 @@ public class BackupEngine
                     {
                         case BackupStrategy.Mirror:
                             File.Delete(destFile);
-                            CleanEmptyDirectories(destPath, Path.GetDirectoryName(destFile)!);
+                            var parentDir = Path.GetDirectoryName(destFile);
+                            if (parentDir != null) CleanEmptyDirectories(destPath, parentDir);
                             break;
 
                         case BackupStrategy.RecycleBin:
@@ -380,21 +381,47 @@ public class BackupEngine
         return hashSource;
     }
 
+    /// <summary>
+    /// Format v2 : "WB02" (4 octets) + IV (16) + ciphertext AES-256-CBC/PKCS7 + HMAC-SHA256 (32).
+    /// Le HMAC est calculé sur (IV + ciphertext) avec une clé dérivée : hmacKey = SHA256(encryptionKey).
+    /// </summary>
     private static async Task CopyAndEncryptFileAsync(string source, string dest, byte[] key, CancellationToken ct)
     {
         using var aes = System.Security.Cryptography.Aes.Create();
         aes.Key = key;
+        aes.Mode = System.Security.Cryptography.CipherMode.CBC;
+        aes.Padding = System.Security.Cryptography.PaddingMode.PKCS7;
         aes.GenerateIV();
 
-        await using var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None,
+        var hmacKey = System.Security.Cryptography.SHA256.HashData(key);
+
+        await using var dst = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.None,
             1024 * 1024, FileOptions.Asynchronous);
+
+        // Header : magic + IV
+        dst.Write("WB02"u8);
         await dst.WriteAsync(aes.IV, ct);
 
-        await using var src = new FileStream(source, FileMode.Open, FileAccess.Read,
-            FileShare.ReadWrite, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await using var cs = new System.Security.Cryptography.CryptoStream(
-            dst, aes.CreateEncryptor(), System.Security.Cryptography.CryptoStreamMode.Write);
-        await src.CopyToAsync(cs, ct);
+        // Chiffrement du contenu
+        await using (var src = new FileStream(source, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+        await using (var cs = new System.Security.Cryptography.CryptoStream(
+            dst, aes.CreateEncryptor(), System.Security.Cryptography.CryptoStreamMode.Write, leaveOpen: true))
+        {
+            await src.CopyToAsync(cs, ct);
+        }
+
+        // Calcul du HMAC sur (IV + ciphertext) — tout le fichier après le magic header
+        dst.Position = 4; // après "WB02"
+        using var hmac = System.Security.Cryptography.IncrementalHash.CreateHMAC(
+            System.Security.Cryptography.HashAlgorithmName.SHA256, hmacKey);
+        var buffer = new byte[65536];
+        int read;
+        while ((read = await dst.ReadAsync(buffer, ct)) > 0)
+            hmac.AppendData(buffer, 0, read);
+
+        // Écrire le HMAC à la fin du fichier
+        await dst.WriteAsync(hmac.GetHashAndReset(), ct);
     }
 
     private static async Task MoveToRecycleBinAsync(
@@ -404,11 +431,12 @@ public class BackupEngine
             DateTime.Now.ToString("yyyy-MM-dd"),
             Path.GetRelativePath(destRoot, destFile));
 
-        Directory.CreateDirectory(Path.GetDirectoryName(recyclePath)!);
-        await Task.Run(() => File.Move(destFile, recyclePath, overwrite: true), ct);
+        var recycleDir = Path.GetDirectoryName(recyclePath);
+        if (recycleDir != null) Directory.CreateDirectory(recycleDir);
+        File.Move(destFile, recyclePath, overwrite: true);
     }
 
-    private static void PurgeRecycleBin(string destRoot, int retentionDays)
+    private void PurgeRecycleBin(string destRoot, int retentionDays)
     {
         var recyclePath = Path.Combine(destRoot, ".winback_recycle");
         if (!Directory.Exists(recyclePath)) return;
@@ -419,20 +447,29 @@ public class BackupEngine
             if (DateTime.TryParse(Path.GetFileName(dir), out var date) && date < cutoff)
             {
                 try { Directory.Delete(dir, recursive: true); }
-                catch { /* Ignorer */ }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Impossible de purger le dossier corbeille {Dir}", dir);
+                }
             }
         }
     }
 
-    private static void CleanEmptyDirectories(string rootPath, string dirPath)
+    private void CleanEmptyDirectories(string rootPath, string dirPath)
     {
         while (!string.Equals(dirPath, rootPath, StringComparison.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(dirPath)) break;
             if (Directory.EnumerateFileSystemEntries(dirPath).Any()) break;
             try { Directory.Delete(dirPath); }
-            catch { break; }
-            dirPath = Path.GetDirectoryName(dirPath)!;
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Impossible de supprimer le dossier vide {Dir}", dirPath);
+                break;
+            }
+            var parent = Path.GetDirectoryName(dirPath);
+            if (parent == null) break;
+            dirPath = parent;
         }
     }
 

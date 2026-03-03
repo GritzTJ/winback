@@ -66,8 +66,9 @@ public sealed class VssSnapshot : IDisposable
 
             return new VssSnapshot(shadowId, deviceObject);
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.WriteLine($"[VSS] Échec de création du snapshot pour {volumePath} : {ex.Message}");
             return null;
         }
     }
@@ -83,7 +84,17 @@ public sealed class VssSnapshot : IDisposable
             searcher.Get();
             return true;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[VSS] VSS indisponible : {ex.Message}");
+            return false;
+        }
+    }
+
+    ~VssSnapshot()
+    {
+        if (!_disposed)
+            DeleteShadow(_shadowId);
     }
 
     public void Dispose()
@@ -91,6 +102,7 @@ public sealed class VssSnapshot : IDisposable
         if (_disposed) return;
         _disposed = true;
         DeleteShadow(_shadowId);
+        GC.SuppressFinalize(this);
     }
 
     private static void DeleteShadow(string shadowId)
@@ -101,7 +113,10 @@ public sealed class VssSnapshot : IDisposable
             using var shadow = new ManagementObject($"Win32_ShadowCopy.ID='{shadowId}'");
             shadow.InvokeMethod("Delete", null, null);
         }
-        catch { /* Ignorer les erreurs de suppression */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[VSS] Échec suppression snapshot {shadowId} : {ex.Message}");
+        }
     }
 }
 

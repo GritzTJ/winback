@@ -172,13 +172,19 @@ if ($Installer) {
         }
     }
 
+    # Extraire la version depuis le csproj (source unique de vérité)
+    [xml]$csproj = Get-Content $appProj
+    $appVersion  = $csproj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+    if (-not $appVersion) { throw "Version introuvable dans $appProj" }
+
     Write-Host "  Compilateur : $iscc" -ForegroundColor DarkGray
     Write-Host "  Script      : $issFile" -ForegroundColor DarkGray
+    Write-Host "  Version     : $appVersion" -ForegroundColor DarkGray
 
-    & $iscc $issFile
+    & $iscc "/DMyAppVersion=$appVersion" $issFile
     if ($LASTEXITCODE -ne 0) { throw "Compilation de l'installateur échouée" }
 
-    $setupPath = "$root\installer\output\WinBack-0.4.4-Setup.exe"
+    $setupPath = "$root\installer\output\WinBack-$appVersion-Setup.exe"
     if (Test-Path $setupPath) {
         $setupSize = (Get-Item $setupPath).Length / 1MB
         Write-Host "`n✓ Installateur généré !" -ForegroundColor Green

@@ -312,14 +312,23 @@ public class RestoreEngine
     /// Stream en lecture seule qui limite le nombre d'octets lus depuis un stream sous-jacent.
     /// Utilisé pour isoler le ciphertext du HMAC lors du déchiffrement v2.
     /// </summary>
-    private sealed class LengthLimitedStream(Stream inner, long length) : Stream
+    private sealed class LengthLimitedStream : Stream
     {
-        private long _remaining = length;
+        private readonly Stream _inner;
+        private readonly long _length;
+        private long _remaining;
+
+        public LengthLimitedStream(Stream inner, long length)
+        {
+            _inner = inner;
+            _length = length;
+            _remaining = length;
+        }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
             if (_remaining <= 0) return 0;
-            var read = inner.Read(buffer, offset, (int)Math.Min(count, _remaining));
+            var read = _inner.Read(buffer, offset, (int)Math.Min(count, _remaining));
             _remaining -= read;
             return read;
         }
@@ -328,7 +337,7 @@ public class RestoreEngine
         {
             if (_remaining <= 0) return 0;
             var toRead = (int)Math.Min(buffer.Length, _remaining);
-            var read = await inner.ReadAsync(buffer[..toRead], ct);
+            var read = await _inner.ReadAsync(buffer[..toRead], ct);
             _remaining -= read;
             return read;
         }
@@ -336,8 +345,8 @@ public class RestoreEngine
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
-        public override long Length => length;
-        public override long Position { get => length - _remaining; set => throw new NotSupportedException(); }
+        public override long Length => _length;
+        public override long Position { get => _length - _remaining; set => throw new NotSupportedException(); }
         public override void Flush() { }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using WinBack.Core.Models;
 
@@ -109,7 +110,13 @@ public class WinBackContext : DbContext
         };
         foreach (var sql in migrations)
         {
-            try { Database.ExecuteSqlRaw(sql); } catch { /* colonne déjà présente */ }
+            try { Database.ExecuteSqlRaw(sql); }
+            catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+            { /* colonne déjà présente — attendu */ }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[WinBackContext] MigrateSchemaIfNeeded : {ex.Message} — SQL: {sql}");
+            }
         }
     }
 }

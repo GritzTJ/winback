@@ -149,7 +149,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             2 => Pairs.Count > 0 && Pairs.All(p =>
                 !string.IsNullOrWhiteSpace(p.SourcePath)
                 && !p.SourcePath.TrimStart().StartsWith(@"\\")
-                && !p.DestRelativePath.Contains("..")),
+                && !p.DestRelativePath.Contains("..")
+                && !Path.IsPathRooted(p.DestRelativePath)),
             _ => true
         };
 
@@ -186,6 +187,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
             if (p.DestRelativePath.Contains(".."))
             {
                 StatusMessage = $"Chemin invalide (path traversal) : {p.DestRelativePath}";
+                return;
+            }
+            if (Path.IsPathRooted(p.DestRelativePath))
+            {
+                StatusMessage = $"Le chemin de destination doit être relatif : {p.DestRelativePath}";
                 return;
             }
         }

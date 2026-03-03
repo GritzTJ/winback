@@ -140,6 +140,15 @@ public class BackupEngine
         var sourcePath = pair.SourcePath;
         var destPath = Path.Combine(destRootPath, pair.DestRelativePath);
 
+        // Defense in depth : vérifier que le chemin de destination reste sous la racine
+        var destRootNorm = Path.GetFullPath(destRootPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var destPathNormalized = Path.GetFullPath(destPath);
+        if (!destPathNormalized.StartsWith(destRootNorm, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("DestRelativePath sort du périmètre, paire ignorée : {DestRelativePath}", pair.DestRelativePath);
+            return;
+        }
+
         if (!Directory.Exists(sourcePath))
         {
             _logger.LogWarning("Dossier source introuvable : {SourcePath}", sourcePath);
@@ -371,8 +380,8 @@ public class BackupEngine
         if (!dryRun && profile.Strategy == BackupStrategy.RecycleBin)
             PurgeRecycleBin(destRootPath, profile.RetentionDays);
 
-        // Sauvegarder les snapshots périodiquement
-        await db.SaveChangesAsync(ct);
+        // Sauvegarder les snapshots — CancellationToken.None car les fichiers sont déjà copiés sur disque
+        await db.SaveChangesAsync(CancellationToken.None);
     }
 
     private static async Task CopyFileAsync(string source, string dest, CancellationToken ct)

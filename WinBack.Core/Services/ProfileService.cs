@@ -63,7 +63,56 @@ public class ProfileService
     public async Task UpdateProfileAsync(BackupProfile profile)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        db.Profiles.Update(profile);
+
+        var existing = await db.Profiles
+            .Include(p => p.Pairs)
+            .FirstOrDefaultAsync(p => p.Id == profile.Id);
+        if (existing == null)
+            throw new InvalidOperationException($"Profil {profile.Id} introuvable.");
+
+        // Copier les propriétés scalaires
+        existing.Name = profile.Name;
+        existing.VolumeGuid = profile.VolumeGuid;
+        existing.DiskLabel = profile.DiskLabel;
+        existing.Strategy = profile.Strategy;
+        existing.RetentionDays = profile.RetentionDays;
+        existing.AutoStart = profile.AutoStart;
+        existing.EnableVss = profile.EnableVss;
+        existing.EnableHashVerification = profile.EnableHashVerification;
+        existing.EnableEncryption = profile.EnableEncryption;
+        existing.InsertionDelaySeconds = profile.InsertionDelaySeconds;
+        existing.EncryptionSalt = profile.EncryptionSalt;
+        existing.IsActive = profile.IsActive;
+
+        // Gérer les paires : supprimer, mettre à jour, ajouter
+        var incomingIds = profile.Pairs.Where(p => p.Id > 0).Select(p => p.Id).ToHashSet();
+        var toRemove = existing.Pairs.Where(p => !incomingIds.Contains(p.Id)).ToList();
+        foreach (var pair in toRemove)
+            db.Pairs.Remove(pair);
+
+        foreach (var incoming in profile.Pairs)
+        {
+            var existingPair = existing.Pairs.FirstOrDefault(p => p.Id == incoming.Id && incoming.Id > 0);
+            if (existingPair != null)
+            {
+                existingPair.SourcePath = incoming.SourcePath;
+                existingPair.DestRelativePath = incoming.DestRelativePath;
+                existingPair.ExcludePatternsJson = incoming.ExcludePatternsJson;
+                existingPair.IsActive = incoming.IsActive;
+            }
+            else
+            {
+                existing.Pairs.Add(new BackupPair
+                {
+                    ProfileId = existing.Id,
+                    SourcePath = incoming.SourcePath,
+                    DestRelativePath = incoming.DestRelativePath,
+                    ExcludePatternsJson = incoming.ExcludePatternsJson,
+                    IsActive = incoming.IsActive
+                });
+            }
+        }
+
         await db.SaveChangesAsync();
     }
 
@@ -261,6 +310,9 @@ public class ProfileService
             // Refuser les chemins relatifs ou avec des séquences ".." dans DestRelativePath
             if (!string.IsNullOrWhiteSpace(p.DestRelativePath) && p.DestRelativePath.Contains(".."))
                 throw new InvalidDataException($"Chemin de destination invalide (path traversal) : {p.DestRelativePath}");
+            // Refuser les chemins absolus dans DestRelativePath (ex: C:\Windows)
+            if (Path.IsPathRooted(p.DestRelativePath))
+                throw new InvalidDataException($"Le chemin de destination doit être relatif : {p.DestRelativePath}");
         }
 
         var profile = new BackupProfile

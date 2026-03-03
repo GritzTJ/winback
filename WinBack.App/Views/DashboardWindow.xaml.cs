@@ -48,6 +48,7 @@ public partial class DashboardWindow : Window
     private void OpenHistory_Click(object sender, RoutedEventArgs e)
     {
         var win = App.GetService<HistoryWindow>();
+        win.Owner = this;
         win.Show();
         win.Activate();
     }

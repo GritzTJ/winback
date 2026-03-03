@@ -261,7 +261,15 @@ public partial class App : Application
             MessageBoxImage.Question);
 
         if (result == MessageBoxResult.Yes)
-            _ = GetService<BackupOrchestrator>().StartBackupAsync(profile, drive);
+        {
+            var orchestrator = GetService<BackupOrchestrator>();
+            var logger = _host.Services.GetRequiredService<ILogger<App>>();
+            _ = Task.Run(async () =>
+            {
+                try { await orchestrator.StartBackupAsync(profile, drive); }
+                catch (Exception ex) { logger.LogError(ex, "Erreur lors du démarrage de la sauvegarde pour {Profile}", profile.Name); }
+            });
+        }
     }
 
     // ── Helper DI ─────────────────────────────────────────────────────────────

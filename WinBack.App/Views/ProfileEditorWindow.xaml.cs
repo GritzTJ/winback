@@ -40,8 +40,7 @@ public partial class ProfileEditorWindow : Window
 
     public async Task LoadProfileForEditAsync(int profileId)
     {
-        var profiles = await _profileService.GetAllProfilesAsync();
-        var profile = profiles.FirstOrDefault(p => p.Id == profileId);
+        var profile = await _profileService.GetProfileByIdAsync(profileId);
         if (profile == null) return;
         _vm.InitFromProfile(profile);
         TitleBlock.Text = $"Modifier — {profile.Name}";

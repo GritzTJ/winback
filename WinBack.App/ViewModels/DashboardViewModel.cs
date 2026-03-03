@@ -176,10 +176,10 @@ public partial class DashboardViewModel : ViewModelBase
                 });
             }
 
-            // Rafraîchir la liste des exécutions récentes sur le thread UI
-            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            // Rafraîchir la liste des exécutions récentes (DB hors du Dispatcher, UI dans le Dispatcher)
+            var runs = await _profileService.GetRecentRunsAsync(10);
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var runs = await _profileService.GetRecentRunsAsync(10);
                 RecentRuns.Clear();
                 foreach (var r in runs)
                     RecentRuns.Add(new RecentRunViewModel(r));

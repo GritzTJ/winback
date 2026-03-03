@@ -23,6 +23,7 @@ public partial class RestoreViewModel : ViewModelBase
 {
     private readonly RestoreEngine _restoreEngine;
     private byte[]? _kdfSalt;
+    private CancellationTokenSource? _treeLoadCts;
 
     // ── Dossiers ─────────────────────────────────────────────────────────────
 
@@ -142,6 +143,9 @@ public partial class RestoreViewModel : ViewModelBase
     /// </summary>
     public void Cleanup()
     {
+        _treeLoadCts?.Cancel();
+        _treeLoadCts?.Dispose();
+        _treeLoadCts = null;
         ClearFileTree();
         FileTree.CollectionChanged -= OnFileTreeCollectionChanged;
     }
@@ -154,13 +158,19 @@ public partial class RestoreViewModel : ViewModelBase
     /// </summary>
     partial void OnSourceFolderChanged(string value)
     {
+        // Annuler le chargement en cours s'il y en a un
+        _treeLoadCts?.Cancel();
+        _treeLoadCts?.Dispose();
+        _treeLoadCts = null;
+
         ClearFileTree();
         _kdfSalt = null;
         if (!string.IsNullOrWhiteSpace(value) && Directory.Exists(value))
         {
             // Charger les métadonnées KDF si présentes (PBKDF2 v2)
             TryLoadKdfMetadata(value);
-            _ = LoadFileTreeAsync(value);
+            _treeLoadCts = new CancellationTokenSource();
+            _ = LoadFileTreeAsync(value, _treeLoadCts.Token);
         }
     }
 
@@ -176,7 +186,11 @@ public partial class RestoreViewModel : ViewModelBase
             if (meta != null && meta.KdfVersion >= 2 && !string.IsNullOrEmpty(meta.Salt))
                 _kdfSalt = Convert.FromBase64String(meta.Salt);
         }
-        catch { /* Métadonnées KDF corrompues ou inaccessibles — utiliser le KDF legacy */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[RestoreViewModel] TryLoadKdfMetadata : {ex.Message}");
+            StatusMessage = "Métadonnées KDF illisibles — le KDF legacy (SHA-256) sera utilisé.";
+        }
     }
 
     // ── Commandes ─────────────────────────────────────────────────────────────
@@ -293,7 +307,7 @@ public partial class RestoreViewModel : ViewModelBase
     /// La construction de l'arbre est effectuée en arrière-plan (Task.Run)
     /// pour ne pas bloquer le thread UI.
     /// </summary>
-    private async Task LoadFileTreeAsync(string sourceFolder)
+    private async Task LoadFileTreeAsync(string sourceFolder, CancellationToken ct)
     {
         IsLoadingTree = true;
         try
@@ -301,15 +315,18 @@ public partial class RestoreViewModel : ViewModelBase
             List<FileTreeNode> roots;
             try
             {
-                roots = await Task.Run(() => BuildTree(sourceFolder));
+                roots = await Task.Run(() => BuildTree(sourceFolder), ct);
             }
+            catch (OperationCanceledException) { return; }
             catch (Exception ex)
             {
                 // Dossier inaccessible ou erreur I/O : afficher le résultat vide
                 _ = ex; // loggé implicitement via le résultat vide
-                IsLoadingTree = false;
                 return;
             }
+
+            // Vérifier l'annulation avant d'ajouter les résultats à l'UI
+            if (ct.IsCancellationRequested) return;
 
             // Ajouter les nœuds sur le thread UI et s'abonner à leurs changements
             foreach (var node in roots)

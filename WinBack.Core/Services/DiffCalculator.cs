@@ -80,6 +80,9 @@ public class DiffCalculator
 
             if (Directory.Exists(entry))
             {
+                // Ignorer les symlinks et jonctions pour éviter les boucles infinies et l'évasion de périmètre
+                if (new DirectoryInfo(entry).Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    continue;
                 ScanDirectory(rootPath, entry, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress);
             }
             else

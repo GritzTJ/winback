@@ -113,7 +113,11 @@ public class UsbMonitorService : IHostedService
             {
                 _logger.LogInformation("Disque retiré : {Drive}", drivePath);
                 DriveRemoved?.Invoke(this, new DriveEventArgs(letter, drivePath, null));
-                Task.Run(() => _orchestrator.OnDriveRemovedAsync(letter));
+                _ = Task.Run(async () =>
+                {
+                    try { await _orchestrator.OnDriveRemovedAsync(letter); }
+                    catch (Exception ex) { _logger.LogError(ex, "Erreur dans OnDriveRemovedAsync pour {Drive}", drivePath); }
+                });
             }
         }
 
@@ -123,26 +127,33 @@ public class UsbMonitorService : IHostedService
     private void OnDriveArrived(char driveLetter)
     {
         var drivePath = $"{driveLetter}:\\";
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
-            // Attendre que le disque soit entièrement monté
-            await Task.Delay(500);
-
-            var details = DriveIdentifier.GetDriveDetails(drivePath);
-            if (details == null)
+            try
             {
-                _logger.LogWarning("Impossible d'identifier le disque {Drive}", drivePath);
-                return;
+                // Attendre que le disque soit entièrement monté
+                await Task.Delay(500);
+
+                var details = DriveIdentifier.GetDriveDetails(drivePath);
+                if (details == null)
+                {
+                    _logger.LogWarning("Impossible d'identifier le disque {Drive}", drivePath);
+                    return;
+                }
+
+                _logger.LogInformation("Disque identifié : {Label} ({Guid})", details.Label, details.VolumeGuid);
+
+                // Notifier les abonnés UI
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    DriveArrived?.Invoke(this, new DriveEventArgs(driveLetter, drivePath, details)));
+
+                // Déléguer au BackupOrchestrator
+                await _orchestrator.OnDriveInsertedAsync(details);
             }
-
-            _logger.LogInformation("Disque identifié : {Label} ({Guid})", details.Label, details.VolumeGuid);
-
-            // Notifier les abonnés UI
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                DriveArrived?.Invoke(this, new DriveEventArgs(driveLetter, drivePath, details)));
-
-            // Déléguer au BackupOrchestrator
-            await _orchestrator.OnDriveInsertedAsync(details);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur dans OnDriveArrived pour {Drive}", drivePath);
+            }
         });
     }
 

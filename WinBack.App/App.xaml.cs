@@ -17,6 +17,9 @@ public partial class App : Application
     private IHost _host = null!;
     private TaskbarIcon _trayIcon = null!;
 
+    /// <summary>Vrai lorsque l'application est en cours d'arrêt (Shutdown appelé).</summary>
+    public static bool IsShuttingDown { get; private set; }
+
     // ── Démarrage ─────────────────────────────────────────────────────────────
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -119,6 +122,10 @@ public partial class App : Application
 
     protected override async void OnExit(ExitEventArgs e)
     {
+        IsShuttingDown = true;
+        // Nettoyer le ViewModel du dashboard pour désabonner les événements
+        if (_dashboard?.DataContext is DashboardViewModel vm)
+            vm.Cleanup();
         _trayIcon.Dispose();
         await _host.StopAsync(TimeSpan.FromSeconds(5));
         _host.Dispose();

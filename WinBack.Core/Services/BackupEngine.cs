@@ -199,7 +199,15 @@ public class BackupEngine
             var vssFile = vssSnapshot != null
                 ? vssSnapshot.TranslatePath(sourceFile, volumeRoot)
                 : sourceFile;
-            var destFile = Path.Combine(destPath, relativePath);
+            var destFile = Path.GetFullPath(Path.Combine(destPath, relativePath));
+
+            // Protection contre le path traversal via symlinks ou chemins malformés
+            var destPathNorm = Path.GetFullPath(destPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!destFile.StartsWith(destPathNorm, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Path traversal détecté, fichier ignoré : {RelativePath}", relativePath);
+                continue;
+            }
 
             try
             {
@@ -304,7 +312,15 @@ public class BackupEngine
             progress?.Report(new BackupProgress(relativePath, ++processed, totalFiles,
                 run.BytesTransferred, BackupPhase.Deleting));
 
-            var destFile = Path.Combine(destPath, relativePath);
+            var destFile = Path.GetFullPath(Path.Combine(destPath, relativePath));
+
+            // Protection path traversal (même vérification que pour les copies)
+            var destPathNormDel = Path.GetFullPath(destPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!destFile.StartsWith(destPathNormDel, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Path traversal détecté sur suppression, fichier ignoré : {RelativePath}", relativePath);
+                continue;
+            }
 
             try
             {

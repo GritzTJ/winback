@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -17,15 +18,17 @@ public class BackupOrchestrator
     private readonly NotificationService _notifications;
     private readonly ILogger<BackupOrchestrator> _logger;
 
-    // Annulations actives par profil (avec lettre de lecteur pour détecter le retrait du disque)
-    private readonly Dictionary<int, (CancellationTokenSource Cts, char DriveLetter)> _activeTasks = new();
+    // Annulations actives par profil (avec lettre de lecteur pour détecter le retrait du disque).
+    // ConcurrentDictionary pour permettre les lectures lock-free depuis le thread UI
+    // (IsBackupRunning, IsBackupPaused) sans risque de deadlock.
+    private readonly ConcurrentDictionary<int, (CancellationTokenSource Cts, char DriveLetter)> _activeTasks = new();
     private readonly HashSet<int> _interruptedProfiles = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     // Handles de pause par profil — partagés avec BackupEngine via BackupEngineOptions.
     // Cycle de vie : créé dans StartBackupAsync, supprimé dans le finally de StartBackupAsync.
     // ManualResetEventSlim.Reset() = met en pause, .Set() = reprend.
-    private readonly Dictionary<int, ManualResetEventSlim> _pauseHandles = new();
+    private readonly ConcurrentDictionary<int, ManualResetEventSlim> _pauseHandles = new();
 
     /// <summary>
     /// Callback appelé par la couche App pour demander le mot de passe de chiffrement
@@ -248,9 +251,9 @@ public class BackupOrchestrator
         finally
         {
             await _lock.WaitAsync();
-            _activeTasks.Remove(profile.Id);
+            _activeTasks.TryRemove(profile.Id, out _);
             _interruptedProfiles.Remove(profile.Id);
-            _pauseHandles.Remove(profile.Id);
+            _pauseHandles.TryRemove(profile.Id, out _);
             _lock.Release();
             cts?.Dispose();
             // Si la sauvegarde était en pause lors de l'annulation, libérer le handle
@@ -279,12 +282,7 @@ public class BackupOrchestrator
         }
     }
 
-    public bool IsBackupRunning(int profileId)
-    {
-        _lock.Wait();
-        try { return _activeTasks.ContainsKey(profileId); }
-        finally { _lock.Release(); }
-    }
+    public bool IsBackupRunning(int profileId) => _activeTasks.ContainsKey(profileId);
 
     /// <summary>
     /// Met en pause la sauvegarde en cours pour le profil indiqué.
@@ -321,11 +319,7 @@ public class BackupOrchestrator
     /// Vrai si la sauvegarde du profil est actuellement en pause.
     /// </summary>
     public bool IsBackupPaused(int profileId)
-    {
-        _lock.Wait();
-        try { return _pauseHandles.TryGetValue(profileId, out var h) && !h.IsSet; }
-        finally { _lock.Release(); }
-    }
+        => _pauseHandles.TryGetValue(profileId, out var h) && !h.IsSet;
 
     /// <summary>
     /// Calcule les changements qu'effectuerait la prochaine sauvegarde du profil

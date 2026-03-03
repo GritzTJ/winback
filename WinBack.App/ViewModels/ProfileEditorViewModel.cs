@@ -146,7 +146,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
         CurrentStep switch
         {
             1 => !string.IsNullOrWhiteSpace(ProfileName) && !string.IsNullOrWhiteSpace(DetectedVolumeGuid),
-            2 => Pairs.Count > 0 && Pairs.All(p => !string.IsNullOrWhiteSpace(p.SourcePath)),
+            2 => Pairs.Count > 0 && Pairs.All(p =>
+                !string.IsNullOrWhiteSpace(p.SourcePath)
+                && !p.SourcePath.TrimStart().StartsWith(@"\\")
+                && !p.DestRelativePath.Contains("..")),
             _ => true
         };
 
@@ -172,6 +175,21 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     private async Task SaveAsync()
     {
+        // Validation de sécurité des chemins (même règles que l'import)
+        foreach (var p in Pairs)
+        {
+            if (p.SourcePath.TrimStart().StartsWith(@"\\"))
+            {
+                StatusMessage = $"Chemin UNC interdit : {p.SourcePath}";
+                return;
+            }
+            if (p.DestRelativePath.Contains(".."))
+            {
+                StatusMessage = $"Chemin invalide (path traversal) : {p.DestRelativePath}";
+                return;
+            }
+        }
+
         SetBusy(true, "Enregistrement…");
         try
         {

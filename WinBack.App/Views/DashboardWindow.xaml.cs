@@ -22,7 +22,11 @@ public partial class DashboardWindow : Window
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        // Réduire dans la barre système plutôt que quitter
+        // Laisser la fenêtre se fermer si l'application est en cours d'arrêt
+        if (App.IsShuttingDown)
+            return;
+
+        // Sinon, réduire dans la barre système plutôt que quitter
         e.Cancel = true;
         Hide();
     }

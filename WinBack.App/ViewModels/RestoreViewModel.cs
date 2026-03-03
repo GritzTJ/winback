@@ -207,10 +207,11 @@ public partial class RestoreViewModel : ViewModelBase
         ShowResult = false;
         SetBusy(true, "Restauration en cours…");
 
+        // Déclaré hors du try pour pouvoir être effacé dans le finally
+        byte[]? key = null;
         try
         {
             // Dériver la clé AES-256 si chiffrement activé, puis effacer le mot de passe
-            byte[]? key = null;
             if (IsEncrypted)
             {
                 key = _kdfSalt != null

@@ -176,12 +176,12 @@ public class BackupOrchestrator
             // pour permettre la restauration cross-machine avec PBKDF2
             if (profile.EnableEncryption && profile.EncryptionSalt != null)
             {
-                var destRoot = drive.DriveLetter + ":\\";
+                var kdfDestRoot = drive.DriveLetter + ":\\";
                 foreach (var pair in profile.Pairs.Where(p => p.IsActive))
                 {
                     try
                     {
-                        var pairDest = Path.Combine(destRoot, pair.DestRelativePath);
+                        var pairDest = Path.Combine(kdfDestRoot, pair.DestRelativePath);
                         var kdfFile = Path.Combine(pairDest, RestoreEngine.KdfMetadataFileName);
                         if (!File.Exists(kdfFile))
                         {

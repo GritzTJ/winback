@@ -131,7 +131,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
                 ExcludePatterns = string.Join(";", pair.ExcludePatterns)
             });
 
-        CurrentStep = IsEditMode ? 1 : 1;
+        CurrentStep = 1;
     }
 
     [RelayCommand(CanExecute = nameof(CanGoToNextStep))]

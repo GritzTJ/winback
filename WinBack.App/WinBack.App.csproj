@@ -11,7 +11,7 @@
     <AssemblyName>WinBack</AssemblyName>
     <RootNamespace>WinBack.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.4.6</Version>
+    <Version>0.4.7</Version>
   </PropertyGroup>
 
   <ItemGroup>

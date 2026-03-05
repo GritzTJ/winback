@@ -192,6 +192,7 @@ public class BackupEngine
             Directory.CreateDirectory(destPath);
 
         // --- Copier les fichiers ajoutés et modifiés ---
+        var addedSet = new HashSet<string>(diff.Added, StringComparer.OrdinalIgnoreCase);
         foreach (var relativePath in diff.Added.Concat(diff.Modified))
         {
             ct.ThrowIfCancellationRequested();
@@ -200,7 +201,7 @@ public class BackupEngine
             if (options.PauseHandle is { IsSet: false })
                 await WaitIfPausedAsync(options.PauseHandle, progress, processed, totalFiles, run, ct);
 
-            var isAdded = diff.Added.Contains(relativePath);
+            var isAdded = addedSet.Contains(relativePath);
             progress?.Report(new BackupProgress(relativePath, ++processed, totalFiles,
                 run.BytesTransferred, BackupPhase.Copying));
 
@@ -344,7 +345,7 @@ public class BackupEngine
                             break;
 
                         case BackupStrategy.RecycleBin:
-                            await MoveToRecycleBinAsync(destFile, destPath, profile.RetentionDays, ct);
+                            await MoveToRecycleBinAsync(destFile, destPath, profile.RetentionDays);
                             break;
 
                         case BackupStrategy.Additive:
@@ -449,8 +450,8 @@ public class BackupEngine
         await dst.WriteAsync(hmac.GetHashAndReset(), ct);
     }
 
-    private static async Task MoveToRecycleBinAsync(
-        string destFile, string destRoot, int retentionDays, CancellationToken ct)
+    private static Task MoveToRecycleBinAsync(
+        string destFile, string destRoot, int retentionDays)
     {
         var recyclePath = Path.Combine(destRoot, ".winback_recycle",
             DateTime.Now.ToString("yyyy-MM-dd"),
@@ -459,6 +460,7 @@ public class BackupEngine
         var recycleDir = Path.GetDirectoryName(recyclePath);
         if (recycleDir != null) Directory.CreateDirectory(recycleDir);
         File.Move(destFile, recyclePath, overwrite: true);
+        return Task.CompletedTask;
     }
 
     private void PurgeRecycleBin(string destRoot, int retentionDays)

@@ -55,17 +55,26 @@ public class InverseNullToVisibilityConverter : IValueConverter
 [ValueConversion(typeof(BackupRunStatus), typeof(Brush))]
 public class StatusToBrushConverter : IValueConverter
 {
+    private static readonly Brush SuccessBrush = Freeze(new SolidColorBrush(Color.FromRgb(16, 124, 16)));
+    private static readonly Brush PartialBrush = Freeze(new SolidColorBrush(Color.FromRgb(216, 59, 1)));
+    private static readonly Brush ErrorBrush = Freeze(new SolidColorBrush(Color.FromRgb(197, 15, 31)));
+    private static readonly Brush CancelledBrush = Freeze(new SolidColorBrush(Color.FromRgb(107, 107, 107)));
+    private static readonly Brush InterruptedBrush = Freeze(new SolidColorBrush(Color.FromRgb(202, 80, 16)));
+    private static readonly Brush RunningBrush = Freeze(new SolidColorBrush(Color.FromRgb(0, 120, 212)));
+
+    private static Brush Freeze(SolidColorBrush brush) { brush.Freeze(); return brush; }
+
     public object Convert(object value, Type t, object p, CultureInfo c)
     {
         if (value is not BackupRunStatus status) return Brushes.Transparent;
         return status switch
         {
-            BackupRunStatus.Success => new SolidColorBrush(Color.FromRgb(16, 124, 16)),
-            BackupRunStatus.PartialSuccess => new SolidColorBrush(Color.FromRgb(216, 59, 1)),
-            BackupRunStatus.Error => new SolidColorBrush(Color.FromRgb(197, 15, 31)),
-            BackupRunStatus.Cancelled => new SolidColorBrush(Color.FromRgb(107, 107, 107)),
-            BackupRunStatus.Interrupted => new SolidColorBrush(Color.FromRgb(202, 80, 16)),
-            BackupRunStatus.Running => new SolidColorBrush(Color.FromRgb(0, 120, 212)),
+            BackupRunStatus.Success => SuccessBrush,
+            BackupRunStatus.PartialSuccess => PartialBrush,
+            BackupRunStatus.Error => ErrorBrush,
+            BackupRunStatus.Cancelled => CancelledBrush,
+            BackupRunStatus.Interrupted => InterruptedBrush,
+            BackupRunStatus.Running => RunningBrush,
             _ => Brushes.Transparent
         };
     }
@@ -104,14 +113,21 @@ public class PercentToDoubleConverter : IValueConverter
 [ValueConversion(typeof(EntryAction), typeof(Brush))]
 public class EntryActionToBrushConverter : IValueConverter
 {
+    private static readonly Brush AddedBrush = Freeze(new SolidColorBrush(Color.FromRgb(16, 124, 16)));
+    private static readonly Brush ModifiedBrush = Freeze(new SolidColorBrush(Color.FromRgb(0, 120, 212)));
+    private static readonly Brush DeletedBrush = Freeze(new SolidColorBrush(Color.FromRgb(197, 15, 31)));
+    private static readonly Brush ActionErrorBrush = Freeze(new SolidColorBrush(Color.FromRgb(216, 59, 1)));
+
+    private static Brush Freeze(SolidColorBrush brush) { brush.Freeze(); return brush; }
+
     public object Convert(object value, Type t, object p, CultureInfo c)
     {
         return value is EntryAction action ? action switch
         {
-            EntryAction.Added => new SolidColorBrush(Color.FromRgb(16, 124, 16)),
-            EntryAction.Modified => new SolidColorBrush(Color.FromRgb(0, 120, 212)),
-            EntryAction.Deleted => new SolidColorBrush(Color.FromRgb(197, 15, 31)),
-            EntryAction.Error => new SolidColorBrush(Color.FromRgb(216, 59, 1)),
+            EntryAction.Added => AddedBrush,
+            EntryAction.Modified => ModifiedBrush,
+            EntryAction.Deleted => DeletedBrush,
+            EntryAction.Error => ActionErrorBrush,
             _ => Brushes.Gray
         } : Brushes.Gray;
     }

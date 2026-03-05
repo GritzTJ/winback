@@ -42,7 +42,7 @@ accessibles sans internet même en cas de catastrophe.
 - **Pause / Reprise** — interrompez une sauvegarde longue et reprenez-la là où elle s'est arrêtée
 - **Annulation propre** — retirer le disque pendant une sauvegarde la marque `Interrupted`, distincte d'une annulation manuelle
 - **Audit d'intégrité** — vérifiez à tout moment que vos fichiers sauvegardés sont intacts et non corrompus
-- **Vérification post-copie** — hash MD5 optionnel pour s'assurer que chaque fichier est identique à la source
+- **Vérification post-copie** — hash SHA-256 optionnel pour s'assurer que chaque fichier est identique à la source
 
 #### Sécuriser et chiffrer
 - **Chiffrement AES-256 par profil** — les fichiers sur le disque sont illisibles sans votre mot de passe
@@ -206,7 +206,7 @@ if you choose, and accessible without internet even when things go wrong.
 - **Pause / Resume** — interrupt a long backup and pick it back up exactly where it left off
 - **Clean cancellation** — removing the drive during a backup marks it `Interrupted`, distinct from a manual cancel
 - **Integrity audit** — verify at any time that your backed-up files are intact and uncorrupted
-- **Post-copy verification** — optional MD5 hash to confirm every file is identical to its source
+- **Post-copy verification** — optional SHA-256 hash to confirm every file is identical to its source
 
 #### Secure and encrypt
 - **Per-profile AES-256 encryption** — files on the drive are unreadable without your password

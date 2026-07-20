@@ -12,6 +12,7 @@ namespace WinBack.App.Views;
 public partial class PasswordPromptWindow : Window
 {
     private byte[]? _salt;
+    private bool _requireConfirmation;
 
     /// <summary>Clé AES-256 dérivée du mot de passe saisi. Null si annulé.</summary>
     public byte[]? DerivedKey { get; private set; }
@@ -22,10 +23,28 @@ public partial class PasswordPromptWindow : Window
     }
 
     /// <summary>Initialise la fenêtre avec le nom du profil et le sel PBKDF2 optionnel.</summary>
-    public void InitForProfile(string profileName, byte[]? salt = null)
+    /// <param name="profileName">Nom du profil affiché à l'utilisateur.</param>
+    /// <param name="salt">Sel PBKDF2 ; <c>null</c> = KDF legacy SHA-256.</param>
+    /// <param name="requireConfirmation">
+    /// Vrai lors de la première sauvegarde chiffrée du profil. Aucun mot de passe de
+    /// référence n'existe alors : une faute de frappe chiffrerait toute la sauvegarde
+    /// avec une clé que l'utilisateur ne pourra jamais reproduire. La double saisie est
+    /// inutile ensuite, puisqu'un mot de passe erroné se détecte à la restauration.
+    /// </param>
+    public void InitForProfile(string profileName, byte[]? salt = null, bool requireConfirmation = false)
     {
         ProfileNameBlock.Text = profileName;
         _salt = salt;
+        _requireConfirmation = requireConfirmation;
+
+        if (requireConfirmation)
+        {
+            ExplanationBlock.Text =
+                "Première sauvegarde chiffrée de ce profil. Choisissez un mot de passe et " +
+                "conservez-le : sans lui, les fichiers sauvegardés seront définitivement illisibles.";
+            ConfirmLabel.Visibility = Visibility.Visible;
+            ConfirmPasswordBox.Visibility = Visibility.Visible;
+        }
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e) => TryConfirm();
@@ -48,8 +67,16 @@ public partial class PasswordPromptWindow : Window
         var password = PasswordBox.Password;
         if (string.IsNullOrEmpty(password))
         {
-            ErrorBlock.Visibility = Visibility.Visible;
+            ShowError("Le mot de passe ne peut pas être vide.");
             PasswordBox.Focus();
+            return;
+        }
+
+        if (_requireConfirmation && !string.Equals(password, ConfirmPasswordBox.Password, StringComparison.Ordinal))
+        {
+            ShowError("Les deux mots de passe ne correspondent pas.");
+            ConfirmPasswordBox.Clear();
+            ConfirmPasswordBox.Focus();
             return;
         }
 
@@ -59,7 +86,22 @@ public partial class PasswordPromptWindow : Window
             ? RestoreEngine.DeriveKeyV2(password, _salt)
             : RestoreEngine.DeriveKey(password);
         PasswordBox.Clear();
+        ConfirmPasswordBox.Clear();
         DialogResult = true;
         Close();
+    }
+
+    private void ShowError(string message)
+    {
+        ErrorBlock.Text = message;
+        ErrorBlock.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Efface les champs de saisie à la fermeture pour ne pas laisser le mot de passe en mémoire.</summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        PasswordBox.Clear();
+        ConfirmPasswordBox.Clear();
+        base.OnClosed(e);
     }
 }

@@ -56,12 +56,14 @@ public partial class DashboardWindow : Window
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
         var win = App.GetService<SettingsWindow>();
+        win.Owner = this;
         win.ShowDialog();
     }
 
     private void AddProfile_Click(object sender, RoutedEventArgs e)
     {
         var win = App.GetService<ProfileEditorWindow>();
+        win.Owner = this;
         if (win.ShowDialog() == true)
             _ = _vm.LoadCommand.ExecuteAsync(null);
     }
@@ -71,6 +73,7 @@ public partial class DashboardWindow : Window
         if (sender is FrameworkElement { Tag: int profileId })
         {
             var win = App.GetService<ProfileEditorWindow>();
+            win.Owner = this;
             await win.LoadProfileForEditAsync(profileId);
             if (win.ShowDialog() == true)
                 _ = _vm.LoadCommand.ExecuteAsync(null);

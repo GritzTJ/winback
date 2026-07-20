@@ -47,6 +47,18 @@ public class FileTreeNode : ObservableObject
     /// <summary>Enfants directs (sous-dossiers et fichiers du répertoire).</summary>
     public ObservableCollection<FileTreeNode> Children { get; } = new();
 
+    /// <summary>
+    /// Déclenché sur le nœud <b>racine</b> chaque fois que la sélection change
+    /// quelque part dans son sous-arbre.
+    /// <para>
+    /// S'abonner à <c>PropertyChanged(IsChecked)</c> de la racine ne suffit pas :
+    /// la remontée s'arrête dès qu'un ancêtre garde le même état tri-state. Une racine
+    /// déjà « indéterminée » n'émettrait alors plus rien alors que la sélection
+    /// réelle continue de changer.
+    /// </para>
+    /// </summary>
+    public event EventHandler? SelectionChanged;
+
     // ── Propriétés d'affichage ────────────────────────────────────────────────
 
     /// <summary>Icône textuelle devant le nom : 📁 pour dossiers, 📄 pour fichiers.</summary>
@@ -120,7 +132,20 @@ public class FileTreeNode : ObservableObject
 
         // Remonter l'état vers le parent
         if (propagateUp)
+        {
             Parent?.UpdateCheckedStateFromChildren();
+            // Signalé inconditionnellement, même si aucun ancêtre n'a changé d'état :
+            // c'est ce qui garantit que le résumé de sélection reste juste.
+            RaiseSelectionChangedOnRoot();
+        }
+    }
+
+    /// <summary>Remonte jusqu'à la racine du sous-arbre et y émet <see cref="SelectionChanged"/>.</summary>
+    private void RaiseSelectionChangedOnRoot()
+    {
+        var root = this;
+        while (root.Parent != null) root = root.Parent;
+        root.SelectionChanged?.Invoke(root, EventArgs.Empty);
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using WinBack.Core.Models;
 using WinBack.Core.Services;
@@ -17,10 +19,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private readonly ProfileService _profileService;
 
     // ── Wizard steps ────────────────────────────────────────────────────────
+    // NotifyCanExecuteChangedFor est indispensable : les conditions de CanGoToNextStep
+    // dépendent de l'étape courante. Sans lui, l'état CanExecute calculé à l'étape 1
+    // resterait actif à l'étape 2 et permettrait de valider des paires incomplètes.
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsStep1))]
     [NotifyPropertyChangedFor(nameof(IsStep2))][NotifyPropertyChangedFor(nameof(IsStep3))]
     [NotifyPropertyChangedFor(nameof(IsStep4))][NotifyPropertyChangedFor(nameof(CanGoBack))]
     [NotifyPropertyChangedFor(nameof(NextButtonText))]
+    [NotifyCanExecuteChangedFor(nameof(NextStepCommand))]
     private int _currentStep = 1;
 
     public bool IsStep1 => CurrentStep == 1;
@@ -82,6 +88,17 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     private int _editingProfileId;
 
+    /// <summary>
+    /// Sel PBKDF2 du profil en cours d'édition, conservé tel quel.
+    /// Il n'est pas modifiable par l'utilisateur mais doit être réinjecté à
+    /// l'enregistrement : le perdre rendrait indéchiffrables toutes les
+    /// sauvegardes existantes du profil.
+    /// </summary>
+    private string? _editingEncryptionSalt;
+
+    /// <summary>Numéro de série du disque, conservé à l'identique en édition (informatif).</summary>
+    private string? _editingDiskSerialNumber;
+
     // ── Résultat ─────────────────────────────────────────────────────────────
     public bool Saved { get; private set; }
     public BackupProfile? SavedProfile { get; private set; }
@@ -89,6 +106,35 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public ProfileEditorViewModel(ProfileService profileService)
     {
         _profileService = profileService;
+
+        // La validité de l'étape 2 dépend du contenu des paires : il faut réévaluer
+        // CanExecute quand une paire est ajoutée/retirée ET quand un champ est modifié
+        // (sinon le bouton « Suivant » reste grisé après le choix d'un dossier source).
+        Pairs.CollectionChanged += OnPairsCollectionChanged;
+    }
+
+    private void OnPairsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (var item in e.OldItems?.OfType<PairRowViewModel>() ?? [])
+            item.PropertyChanged -= OnPairRowChanged;
+        foreach (var item in e.NewItems?.OfType<PairRowViewModel>() ?? [])
+            item.PropertyChanged += OnPairRowChanged;
+
+        NextStepCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnPairRowChanged(object? sender, PropertyChangedEventArgs e)
+        => NextStepCommand.NotifyCanExecuteChanged();
+
+    /// <summary>
+    /// Désabonne les événements des lignes de paires.
+    /// Appelé par <c>ProfileEditorWindow</c> à la fermeture.
+    /// </summary>
+    public void Cleanup()
+    {
+        foreach (var pair in Pairs)
+            pair.PropertyChanged -= OnPairRowChanged;
+        Pairs.CollectionChanged -= OnPairsCollectionChanged;
     }
 
     /// <summary>Pré-remplir avec un disque détecté (mode création depuis détection USB).</summary>
@@ -109,6 +155,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         IsEditMode = true;
         _editingProfileId = profile.Id;
+        _editingEncryptionSalt   = profile.EncryptionSalt;
+        _editingDiskSerialNumber = profile.DiskSerialNumber;
         ProfileName = profile.Name;
         DetectedVolumeGuid = profile.VolumeGuid;
         DetectedDriveLabel = profile.DiskLabel ?? profile.VolumeGuid;
@@ -121,11 +169,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // Le mot de passe de chiffrement n'est jamais stocké — il sera redemandé à la connexion.
         InsertionDelaySeconds = profile.InsertionDelaySeconds;
 
+        // Toutes les paires sont chargées, y compris les inactives : UpdateProfileAsync
+        // supprime celles qui ne sont pas renvoyées, donc filtrer ici les détruirait.
         Pairs.Clear();
-        foreach (var pair in profile.Pairs.Where(p => p.IsActive))
+        foreach (var pair in profile.Pairs)
             Pairs.Add(new PairRowViewModel
             {
                 Id = pair.Id,
+                IsActive = pair.IsActive,
                 SourcePath = pair.SourcePath,
                 DestRelativePath = pair.DestRelativePath,
                 ExcludePatterns = string.Join(";", pair.ExcludePatterns)
@@ -147,13 +198,30 @@ public partial class ProfileEditorViewModel : ViewModelBase
         CurrentStep switch
         {
             1 => !string.IsNullOrWhiteSpace(ProfileName) && !string.IsNullOrWhiteSpace(DetectedVolumeGuid),
-            2 => Pairs.Count > 0 && Pairs.All(p =>
-                !string.IsNullOrWhiteSpace(p.SourcePath)
-                && !p.SourcePath.TrimStart().StartsWith(@"\\")
-                && !p.DestRelativePath.Contains("..")
-                && !Path.IsPathRooted(p.DestRelativePath)),
+            2 => Pairs.Count > 0 && Pairs.All(p => ValidatePair(p) == null),
             _ => true
         };
+
+    /// <summary>
+    /// Valide une paire source → destination.
+    /// Retourne <c>null</c> si la paire est valide, sinon le message d'erreur à afficher.
+    /// Source unique de vérité, partagée par l'assistant (bouton « Suivant ») et par
+    /// l'enregistrement : les deux ne peuvent donc pas diverger.
+    /// </summary>
+    private static string? ValidatePair(PairRowViewModel p)
+    {
+        if (string.IsNullOrWhiteSpace(p.SourcePath))
+            return "Chaque dossier source doit être renseigné.";
+        if (p.SourcePath.TrimStart().StartsWith(@"\\"))
+            return $"Chemin UNC interdit : {p.SourcePath}";
+        if (string.IsNullOrWhiteSpace(p.DestRelativePath))
+            return "Chaque dossier de destination doit être renseigné.";
+        if (p.DestRelativePath.Contains(".."))
+            return $"Chemin invalide (path traversal) : {p.DestRelativePath}";
+        if (Path.IsPathRooted(p.DestRelativePath))
+            return $"Le chemin de destination doit être relatif : {p.DestRelativePath}";
+        return null;
+    }
 
     [RelayCommand]
     private void PreviousStep()
@@ -177,22 +245,19 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     private async Task SaveAsync()
     {
-        // Validation de sécurité des chemins (même règles que l'import)
+        // Dernier rempart avant écriture en base : l'assistant ne doit jamais laisser
+        // passer une paire invalide, mais on ne s'appuie pas sur l'UI pour la sécurité.
+        if (Pairs.Count == 0)
+        {
+            StatusMessage = "Ajoutez au moins un dossier à sauvegarder.";
+            return;
+        }
         foreach (var p in Pairs)
         {
-            if (p.SourcePath.TrimStart().StartsWith(@"\\"))
+            var error = ValidatePair(p);
+            if (error != null)
             {
-                StatusMessage = $"Chemin UNC interdit : {p.SourcePath}";
-                return;
-            }
-            if (p.DestRelativePath.Contains(".."))
-            {
-                StatusMessage = $"Chemin invalide (path traversal) : {p.DestRelativePath}";
-                return;
-            }
-            if (Path.IsPathRooted(p.DestRelativePath))
-            {
-                StatusMessage = $"Le chemin de destination doit être relatif : {p.DestRelativePath}";
+                StatusMessage = error;
                 return;
             }
         }
@@ -215,10 +280,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
                     EnableHashVerification = EnableHashVerification,
                     EnableEncryption = EnableEncryption,
                     InsertionDelaySeconds = InsertionDelaySeconds,
+                    // Champs non éditables, restitués tels quels pour ne pas les écraser
+                    EncryptionSalt   = _editingEncryptionSalt,
+                    DiskSerialNumber = _editingDiskSerialNumber,
                     Pairs = Pairs.Select(p => new BackupPair
                     {
                         Id = p.Id,
                         ProfileId = _editingProfileId,
+                        IsActive = p.IsActive,
                         SourcePath = p.SourcePath,
                         DestRelativePath = p.DestRelativePath,
                         ExcludePatterns = p.ExcludePatterns
@@ -246,6 +315,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
                     InsertionDelaySeconds = InsertionDelaySeconds,
                     Pairs = Pairs.Select(p => new BackupPair
                     {
+                        IsActive = p.IsActive,
                         SourcePath = p.SourcePath,
                         DestRelativePath = p.DestRelativePath,
                         ExcludePatterns = p.ExcludePatterns
@@ -265,6 +335,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
 public partial class PairRowViewModel : ObservableObject
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// Vrai si la paire est prise en compte lors des sauvegardes.
+    /// Conservée à l'identique en édition : sans elle, toutes les paires
+    /// désactivées seraient réactivées (ou supprimées) à l'enregistrement.
+    /// </summary>
+    public bool IsActive { get; set; } = true;
 
     [ObservableProperty]
     private string _sourcePath = string.Empty;

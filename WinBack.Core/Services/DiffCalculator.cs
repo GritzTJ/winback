@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using WinBack.Core.Models;
 
 namespace WinBack.Core.Services;
@@ -39,19 +40,44 @@ public class DiffCalculator
         var foundPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         progress?.Report($"Analyse de {sourcePath}…");
-        ScanDirectory(sourcePath, sourcePath, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress);
+        bool scanComplete = ScanDirectory(
+            sourcePath, sourcePath, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress);
 
-        // Fichiers présents dans le snapshot mais absents du scan → Supprimés
-        foreach (var snap in existingSnapshots)
+        // Fichiers présents dans le snapshot mais absents du scan → Supprimés.
+        //
+        // SÉCURITÉ : si une partie de l'arborescence n'a pas pu être lue (permissions,
+        // verrou antivirus, disque qui se déconnecte…), l'absence d'un fichier dans
+        // foundPaths ne prouve PAS qu'il a été supprimé à la source. Propager des
+        // suppressions dans ce cas effacerait des fichiers encore vivants du disque de
+        // sauvegarde (stratégie Mirror). On abandonne donc entièrement la détection de
+        // suppressions pour ce scan : les copies/mises à jour restent effectuées.
+        if (scanComplete)
         {
-            if (!foundPaths.Contains(snap.RelativePath))
+            foreach (var snap in existingSnapshots)
+            {
+                if (foundPaths.Contains(snap.RelativePath)) continue;
+
+                // Un fichier désormais couvert par un pattern d'exclusion n'a pas été
+                // supprimé à la source : il est simplement sorti du périmètre. On le
+                // laisse en place sur la destination plutôt que de l'effacer.
+                if (pair.IsExcluded(snap.RelativePath) ||
+                    (globalExcludePatterns?.Count > 0 &&
+                     BackupPair.IsExcludedByPatterns(snap.RelativePath, globalExcludePatterns)))
+                    continue;
+
                 deleted.Add(snap.RelativePath);
+            }
         }
 
-        return new DiffResult(added, modified, deleted);
+        return new DiffResult(added, modified, deleted, ScanIncomplete: !scanComplete);
     }
 
-    private static void ScanDirectory(
+    /// <summary>
+    /// Parcourt récursivement un dossier.
+    /// Retourne <c>false</c> si une partie de l'arborescence n'a pas pu être lue,
+    /// auquel cas la liste des fichiers trouvés est incomplète.
+    /// </summary>
+    private static bool ScanDirectory(
         string rootPath,
         string currentPath,
         BackupPair pair,
@@ -62,13 +88,25 @@ public class DiffCalculator
         List<string> modified,
         IProgress<string>? progress)
     {
-        IEnumerable<string> entries;
+        List<string> entries;
         try
         {
-            entries = Directory.EnumerateFileSystemEntries(currentPath);
+            // Matérialisé immédiatement : une IOException levée pendant l'itération
+            // paresseuse laisserait un scan partiel passer pour un scan complet.
+            entries = Directory.EnumerateFileSystemEntries(currentPath).ToList();
         }
-        catch (UnauthorizedAccessException) { return; } // Dossier non accessible par l'utilisateur courant
-        catch (IOException) { return; } // Dossier disparu ou verrouillé pendant l'énumération
+        catch (UnauthorizedAccessException ex) // Dossier non accessible par l'utilisateur courant
+        {
+            Trace.WriteLine($"[DiffCalculator] Dossier illisible {currentPath} : {ex.Message}");
+            return false;
+        }
+        catch (IOException ex) // Dossier disparu ou verrouillé pendant l'énumération
+        {
+            Trace.WriteLine($"[DiffCalculator] Dossier illisible {currentPath} : {ex.Message}");
+            return false;
+        }
+
+        bool complete = true;
 
         foreach (var entry in entries)
         {
@@ -81,22 +119,39 @@ public class DiffCalculator
             if (Directory.Exists(entry))
             {
                 // Ignorer les symlinks et jonctions pour éviter les boucles infinies et l'évasion de périmètre
-                if (new DirectoryInfo(entry).Attributes.HasFlag(FileAttributes.ReparsePoint))
+                bool isReparsePoint;
+                try
+                {
+                    isReparsePoint = new DirectoryInfo(entry).Attributes.HasFlag(FileAttributes.ReparsePoint);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Attributs illisibles : le contenu du dossier l'est probablement aussi.
+                    Trace.WriteLine($"[DiffCalculator] Attributs illisibles {entry} : {ex.Message}");
+                    complete = false;
                     continue;
-                ScanDirectory(rootPath, entry, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress);
+                }
+
+                if (isReparsePoint) continue;
+
+                if (!ScanDirectory(rootPath, entry, pair, globalExcludePatterns, snapshotIndex, foundPaths, added, modified, progress))
+                    complete = false;
             }
             else
             {
                 try
                 {
                     var info = new FileInfo(entry);
+                    // Length lève si le fichier a disparu entre l'énumération et ici :
+                    // on le lit avant d'enregistrer le chemin comme « trouvé ».
+                    var length = info.Length;
+                    var lastModified = info.LastWriteTimeUtc;
                     foundPaths.Add(relativePath);
 
                     if (snapshotIndex.TryGetValue(relativePath, out var snap))
                     {
                         // Comparer taille ET date de modification (précision à la seconde)
-                        var lastModified = info.LastWriteTimeUtc;
-                        if (info.Length != snap.Size ||
+                        if (length != snap.Size ||
                             Math.Abs((lastModified - snap.LastModified).TotalSeconds) > 2)
                         {
                             modified.Add(relativePath);
@@ -110,9 +165,22 @@ public class DiffCalculator
 
                     progress?.Report(relativePath);
                 }
-                catch (IOException) { /* Fichier inaccessible, on l'ignore */ }
+                catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    // Le fichier a réellement disparu entre l'énumération et la lecture :
+                    // c'est une suppression légitime, le scan reste fiable.
+                    Trace.WriteLine($"[DiffCalculator] Fichier disparu pendant le scan {entry} : {ex.Message}");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Fichier verrouillé ou refusé : on ne peut pas conclure qu'il a disparu.
+                    Trace.WriteLine($"[DiffCalculator] Fichier illisible {entry} : {ex.Message}");
+                    complete = false;
+                }
             }
         }
+
+        return complete;
     }
 
     /// <summary>
@@ -128,10 +196,17 @@ public class DiffCalculator
     }
 }
 
+/// <param name="ScanIncomplete">
+/// Vrai si une partie de l'arborescence source n'a pas pu être lue.
+/// Dans ce cas <see cref="Deleted"/> est volontairement vide : on ne peut pas
+/// distinguer un fichier supprimé d'un fichier temporairement illisible, et
+/// propager la suppression détruirait des données sur le disque de sauvegarde.
+/// </param>
 public record DiffResult(
     IReadOnlyList<string> Added,
     IReadOnlyList<string> Modified,
-    IReadOnlyList<string> Deleted)
+    IReadOnlyList<string> Deleted,
+    bool ScanIncomplete = false)
 {
     public int TotalChanges => Added.Count + Modified.Count + Deleted.Count;
     public bool HasChanges => TotalChanges > 0;

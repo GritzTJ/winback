@@ -1,4 +1,5 @@
 using H.NotifyIcon;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinBack.Core.Models;
 
@@ -43,7 +44,7 @@ public class NotificationService
         public IntPtr  hBalloonIcon;
     }
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA pnid);
 
     // ── État ───────────────────────────────────────────────────────────────────
@@ -100,27 +101,33 @@ public class NotificationService
 
     private void ShowBalloon(string title, string message, uint niifFlags)
     {
-        if (_trayIcon == null) return;
+        var trayIcon = _trayIcon;
+        if (trayIcon == null) return;
 
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
             try
             {
-                // Récupérer le handle de fenêtre via WindowInteropHelper sur le MessageWindow interne
+                // Récupérer le handle de fenêtre via le MessageWindow interne de H.NotifyIcon
                 var field = typeof(TaskbarIcon).GetField("_messageSink",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var sink = field?.GetValue(_trayIcon);
+                var sink = field?.GetValue(trayIcon);
                 var hWndProp = sink?.GetType().GetProperty("Handle",
                     System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
                 var hWnd = (IntPtr?)hWndProp?.GetValue(sink) ?? IntPtr.Zero;
 
-                if (hWnd == IntPtr.Zero) return;
+                if (hWnd == IntPtr.Zero)
+                {
+                    Trace.WriteLine("[Notifications] HWND de l'icône introuvable — notification ignorée. " +
+                                    "L'API interne de H.NotifyIcon a probablement changé.");
+                    return;
+                }
 
                 var nid = new NOTIFYICONDATA
                 {
                     cbSize        = (uint)Marshal.SizeOf<NOTIFYICONDATA>(),
                     hWnd          = hWnd,
-                    uID           = 1,
+                    uID           = ResolveIconId(trayIcon),
                     uFlags        = NIF_INFO,
                     szInfo        = message.Length > 255 ? message[..255] : message,
                     szInfoTitle   = title.Length > 63 ? title[..63] : title,
@@ -129,13 +136,41 @@ public class NotificationService
                     szTip         = string.Empty
                 };
 
-                Shell_NotifyIcon(NIM_MODIFY, ref nid);
+                // NIM_MODIFY ne fait rien si (hWnd, uID) ne désigne pas une icône existante :
+                // sans ce log, une notification qui n'apparaît jamais serait indétectable.
+                if (!Shell_NotifyIcon(NIM_MODIFY, ref nid))
+                    Trace.WriteLine($"[Notifications] Shell_NotifyIcon a échoué (uID={nid.uID}, " +
+                                    $"win32={Marshal.GetLastWin32Error()}).");
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignorer les erreurs de notification (non critique)
+                // Une notification ratée ne doit pas interrompre la sauvegarde,
+                // mais elle doit rester diagnosticable.
+                Trace.WriteLine($"[Notifications] Échec de l'affichage : {ex}");
             }
         });
+    }
+
+    /// <summary>
+    /// Identifiant de l'icône dans la barre système.
+    /// H.NotifyIcon attribue cet ID lui-même ; le coder en dur ferait échouer
+    /// silencieusement NIM_MODIFY dès que la bibliothèque en choisit un autre.
+    /// </summary>
+    private static uint ResolveIconId(TaskbarIcon trayIcon)
+    {
+        try
+        {
+            var prop = typeof(TaskbarIcon).GetProperty("Id",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            var value = prop?.GetValue(trayIcon);
+            if (value != null)
+                return Convert.ToUInt32(value);
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[Notifications] Impossible de lire l'ID de l'icône : {ex.Message}");
+        }
+        return 1; // Repli sur le comportement historique
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -186,13 +186,17 @@ public class BackupOrchestrator
                     {
                         var pairDest = Path.Combine(kdfDestRoot, pair.DestRelativePath);
                         var kdfFile = Path.Combine(pairDest, RestoreEngine.KdfMetadataFileName);
-                        if (!File.Exists(kdfFile))
-                        {
-                            Directory.CreateDirectory(pairDest);
-                            var kdfMeta = new RestoreEngine.KdfMetadata(2, profile.EncryptionSalt, RestoreEngine.Pbkdf2Iterations);
-                            await File.WriteAllTextAsync(kdfFile, JsonSerializer.Serialize(kdfMeta,
-                                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
-                        }
+
+                        // Le fichier doit toujours refléter le sel réellement utilisé pour
+                        // chiffrer. S'il contient un sel obsolète, la restauration dérive une
+                        // clé qui ne déchiffre pas les fichiers écrits par cette exécution.
+                        if (ReadKdfSalt(kdfFile) == profile.EncryptionSalt) continue;
+
+                        Directory.CreateDirectory(pairDest);
+                        var kdfMeta = new RestoreEngine.KdfMetadata(2, profile.EncryptionSalt, RestoreEngine.Pbkdf2Iterations);
+                        await File.WriteAllTextAsync(kdfFile, JsonSerializer.Serialize(kdfMeta,
+                            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+                        _logger.LogInformation("Métadonnées KDF écrites pour {Pair}", pair.DestRelativePath);
                     }
                     catch (Exception ex)
                     {
@@ -251,10 +255,16 @@ public class BackupOrchestrator
         finally
         {
             await _lock.WaitAsync();
-            _activeTasks.TryRemove(profile.Id, out _);
-            _interruptedProfiles.Remove(profile.Id);
-            _pauseHandles.TryRemove(profile.Id, out _);
-            _lock.Release();
+            try
+            {
+                _activeTasks.TryRemove(profile.Id, out _);
+                _interruptedProfiles.Remove(profile.Id);
+                _pauseHandles.TryRemove(profile.Id, out _);
+            }
+            finally
+            {
+                _lock.Release();
+            }
             cts?.Dispose();
             // Si la sauvegarde était en pause lors de l'annulation, libérer le handle
             // pour ne pas bloquer le thread de pool qui attendait dessus.
@@ -262,6 +272,27 @@ public class BackupOrchestrator
             pauseHandle?.Dispose();
             // Effacer la clé de chiffrement de la mémoire
             if (encryptionKey != null) Array.Clear(encryptionKey);
+        }
+    }
+
+    /// <summary>
+    /// Retourne le sel enregistré dans un fichier de métadonnées KDF,
+    /// ou <c>null</c> si le fichier est absent, illisible ou invalide.
+    /// </summary>
+    private string? ReadKdfSalt(string kdfFile)
+    {
+        try
+        {
+            if (!File.Exists(kdfFile)) return null;
+            var meta = JsonSerializer.Deserialize<RestoreEngine.KdfMetadata>(
+                File.ReadAllText(kdfFile),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return meta?.Salt;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Métadonnées KDF illisibles : {File} — le fichier sera réécrit", kdfFile);
+            return null;
         }
     }
 

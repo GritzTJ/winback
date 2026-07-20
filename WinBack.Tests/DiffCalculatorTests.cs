@@ -204,4 +204,56 @@ public class DiffCalculatorTests : IDisposable
         Assert.Contains("modified.txt", diff.Modified);
         Assert.Contains("deleted.txt", diff.Deleted);
     }
+
+    // ── Protection contre les suppressions accidentelles ───────────────────
+
+    [Fact]
+    public void Compute_ScanReadable_ScanIncompleteIsFalse()
+    {
+        WriteFile("a.txt");
+        WriteFile(Path.Combine("sub", "b.txt"));
+
+        var diff = _differ.Compute(_sourceDir, [], _pair);
+
+        Assert.False(diff.ScanIncomplete);
+    }
+
+    /// <summary>
+    /// Un fichier déjà sauvegardé qui devient couvert par un pattern d'exclusion
+    /// (de la paire) n'a pas été supprimé à la source : il ne doit pas être effacé
+    /// de la destination.
+    /// </summary>
+    [Fact]
+    public void Compute_SnapshotNowExcludedByPair_NotReportedAsDeleted()
+    {
+        var pair = new BackupPair { ExcludePatterns = ["*.log"] };
+        var snapshots = new List<FileSnapshot>
+        {
+            MakeSnapshot("trace.log", 10, DateTime.UtcNow),
+            MakeSnapshot("data.txt", 20, DateTime.UtcNow),
+        };
+
+        // Aucun des deux fichiers n'existe sur le disque : sans le filtrage,
+        // les deux seraient classés « supprimés ».
+        var diff = _differ.Compute(_sourceDir, snapshots, pair);
+
+        Assert.DoesNotContain("trace.log", diff.Deleted);
+        Assert.Contains("data.txt", diff.Deleted);
+    }
+
+    /// <summary>Même protection pour les patterns d'exclusion globaux.</summary>
+    [Fact]
+    public void Compute_SnapshotNowExcludedGlobally_NotReportedAsDeleted()
+    {
+        var snapshots = new List<FileSnapshot>
+        {
+            MakeSnapshot("cache.tmp", 10, DateTime.UtcNow),
+            MakeSnapshot("data.txt", 20, DateTime.UtcNow),
+        };
+
+        var diff = _differ.Compute(_sourceDir, snapshots, _pair, globalExcludePatterns: ["*.tmp"]);
+
+        Assert.DoesNotContain("cache.tmp", diff.Deleted);
+        Assert.Contains("data.txt", diff.Deleted);
+    }
 }

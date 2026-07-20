@@ -119,23 +119,26 @@ public partial class SettingsViewModel : ViewModelBase
         SetBusy(true, "Enregistrement…");
         try
         {
-            var s = new AppSettings
-            {
-                StartWithWindows  = StartWithWindows,
-                ShowNotifications = ShowNotifications,
-                AdvancedMode      = AdvancedMode,
-                StartMinimized    = StartMinimized,
-                LogLevel          = LogLevel,
-                // Ne persiste pas le chemin s'il correspond au chemin par défaut
-                LogDirectory  = LogDirectory == GetDefaultLogDirectory() ? null : LogDirectory,
-                MaxRetryCount          = MaxRetryCount,
-                RetryDelayMs           = RetryDelayMs,
-                ClickableNotifications = ClickableNotifications,
-                GlobalExcludePatterns  = GlobalExcludePatterns
-                    .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Where(l => !string.IsNullOrWhiteSpace(l))
-                    .ToList()
-            };
+            // On repart des paramètres persistés plutôt que d'un AppSettings neuf :
+            // les champs non exposés par cet écran (Language…) seraient sinon
+            // silencieusement réinitialisés à chaque enregistrement.
+            var s = await _profileService.GetSettingsAsync();
+
+            s.StartWithWindows  = StartWithWindows;
+            s.ShowNotifications = ShowNotifications;
+            s.AdvancedMode      = AdvancedMode;
+            s.StartMinimized    = StartMinimized;
+            s.LogLevel          = LogLevel;
+            // Ne persiste pas le chemin s'il correspond au chemin par défaut
+            s.LogDirectory  = LogDirectory == GetDefaultLogDirectory() ? null : LogDirectory;
+            s.MaxRetryCount          = MaxRetryCount;
+            s.RetryDelayMs           = RetryDelayMs;
+            s.ClickableNotifications = ClickableNotifications;
+            s.GlobalExcludePatterns  = GlobalExcludePatterns
+                .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .ToList();
+
             await _profileService.SaveSettingsAsync(s);
             ApplyStartupSetting(StartWithWindows);
             StatusMessage = "Paramètres enregistrés.";

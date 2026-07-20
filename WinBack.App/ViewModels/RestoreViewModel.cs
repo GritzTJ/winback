@@ -2,7 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using WinBack.Core.Services;
@@ -331,13 +330,17 @@ public partial class RestoreViewModel : ViewModelBase
             // Ajouter les nœuds sur le thread UI et s'abonner à leurs changements
             foreach (var node in roots)
             {
-                node.PropertyChanged += OnRootNodePropertyChanged;
+                node.SelectionChanged += OnNodeSelectionChanged;
                 FileTree.Add(node);
             }
         }
         finally
         {
-            IsLoadingTree = false;
+            // Ne pas écraser l'état d'un chargement plus récent : quand SourceFolder
+            // change, ce finally s'exécute après que le nouveau chargement a déjà
+            // positionné IsLoadingTree = true.
+            if (!ct.IsCancellationRequested)
+                IsLoadingTree = false;
         }
     }
 
@@ -401,15 +404,11 @@ public partial class RestoreViewModel : ViewModelBase
     // ── Gestion de la sélection ───────────────────────────────────────────────
 
     /// <summary>
-    /// Appelé quand un nœud racine change son état IsChecked.
-    /// Comme la propagation est ascendante jusqu'à la racine, ce handler est
-    /// déclenché lors de tout changement dans le sous-arbre (y compris les feuilles).
+    /// Appelé quand la sélection change quelque part dans le sous-arbre d'un nœud racine.
+    /// <see cref="FileTreeNode.SelectionChanged"/> est émis inconditionnellement, contrairement
+    /// à PropertyChanged(IsChecked) qui se tait quand l'état tri-state de la racine ne bouge pas.
     /// </summary>
-    private void OnRootNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(FileTreeNode.IsChecked)) return;
-        RefreshSelectionUI();
-    }
+    private void OnNodeSelectionChanged(object? sender, EventArgs e) => RefreshSelectionUI();
 
     /// <summary>
     /// Notifie l'UI que la sélection a changé (résumé + état du bouton Restaurer).
@@ -440,7 +439,7 @@ public partial class RestoreViewModel : ViewModelBase
     private void ClearFileTree()
     {
         foreach (var node in FileTree)
-            node.PropertyChanged -= OnRootNodePropertyChanged;
+            node.SelectionChanged -= OnNodeSelectionChanged;
         FileTree.Clear();
         ShowResult = false;
     }

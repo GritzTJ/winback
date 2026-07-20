@@ -167,6 +167,23 @@ public class BackupEngine
         _logger.LogInformation("Diff paire {PairId}: +{A} ~{M} -{D}",
             pair.Id, diff.Added.Count, diff.Modified.Count, diff.Deleted.Count);
 
+        if (diff.ScanIncomplete)
+        {
+            // Une partie de la source n'a pas pu être lue : les suppressions ne sont pas
+            // propagées (cf. DiffCalculator). La sauvegarde est marquée comme partielle
+            // pour que l'utilisateur sache que le miroir n'est pas exact.
+            _logger.LogWarning(
+                "Scan incomplet pour {SourcePath} : certains fichiers ou dossiers sont illisibles. " +
+                "Les suppressions ne seront pas répercutées sur la destination.", sourcePath);
+            run.FilesErrored++;
+            AddEntry(run, new BackupRunEntry
+            {
+                Action = EntryAction.Error,
+                RelativePath = pair.SourcePath,
+                ErrorDetail = "Scan incomplet : dossier(s) illisible(s). Suppressions non propagées."
+            });
+        }
+
         if (!diff.HasChanges && snapshots.Count > 0)
         {
             _logger.LogInformation("Aucun changement détecté pour {SourcePath}", sourcePath);
@@ -285,7 +302,7 @@ public class BackupEngine
                 if (isAdded) run.FilesAdded++;
                 else run.FilesModified++;
 
-                run.Entries.Add(new BackupRunEntry
+                AddEntry(run, new BackupRunEntry
                 {
                     Action = isAdded ? EntryAction.Added : EntryAction.Modified,
                     RelativePath = relativePath
@@ -295,7 +312,7 @@ public class BackupEngine
             {
                 _logger.LogWarning(ex, "Erreur copie {File}", relativePath);
                 run.FilesErrored++;
-                run.Entries.Add(new BackupRunEntry
+                AddEntry(run, new BackupRunEntry
                 {
                     Action = EntryAction.Error,
                     RelativePath = relativePath,
@@ -345,7 +362,7 @@ public class BackupEngine
                             break;
 
                         case BackupStrategy.RecycleBin:
-                            await MoveToRecycleBinAsync(destFile, destPath, profile.RetentionDays);
+                            MoveToRecycleBin(destFile, destPath);
                             break;
 
                         case BackupStrategy.Additive:
@@ -364,7 +381,7 @@ public class BackupEngine
                 }
 
                 run.FilesDeleted++;
-                run.Entries.Add(new BackupRunEntry
+                AddEntry(run, new BackupRunEntry
                 {
                     Action = EntryAction.Deleted,
                     RelativePath = relativePath
@@ -377,12 +394,45 @@ public class BackupEngine
             }
         }
 
-        // Purger la corbeille de sauvegarde si nécessaire
+        // Purger la corbeille de sauvegarde si nécessaire.
+        // destPath (et non destRootPath) : la corbeille est créée par MoveToRecycleBin
+        // à l'intérieur du dossier de destination de la paire.
         if (!dryRun && profile.Strategy == BackupStrategy.RecycleBin)
-            PurgeRecycleBin(destRootPath, profile.RetentionDays);
+            PurgeRecycleBin(destPath, profile.RetentionDays);
 
         // Sauvegarder les snapshots — CancellationToken.None car les fichiers sont déjà copiés sur disque
         await db.SaveChangesAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Nombre maximum d'entrées de détail conservées par exécution.
+    /// Au-delà, seules les erreurs continuent d'être enregistrées : les compteurs
+    /// (<see cref="BackupRun.FilesAdded"/>, etc.) restent exacts, mais le détail
+    /// fichier par fichier est tronqué pour borner la mémoire et la taille de la base
+    /// (une sauvegarde de 500 000 fichiers générerait autant de lignes en une transaction).
+    /// </summary>
+    public const int MaxRunEntries = 10_000;
+
+    private void AddEntry(BackupRun run, BackupRunEntry entry)
+    {
+        if (run.Entries.Count < MaxRunEntries)
+        {
+            run.Entries.Add(entry);
+            return;
+        }
+
+        // Les erreurs restent prioritaires : on les enregistre même au-delà du plafond,
+        // avec une marge stricte pour éviter une croissance non bornée.
+        if (entry.Action == EntryAction.Error && run.Entries.Count < MaxRunEntries * 2)
+        {
+            run.Entries.Add(entry);
+            return;
+        }
+
+        if (run.Entries.Count == MaxRunEntries)
+            _logger.LogInformation(
+                "Détail des entrées tronqué au-delà de {Max} fichiers (les compteurs restent exacts).",
+                MaxRunEntries);
     }
 
     private static async Task CopyFileAsync(string source, string dest, CancellationToken ct)
@@ -450,28 +500,42 @@ public class BackupEngine
         await dst.WriteAsync(hmac.GetHashAndReset(), ct);
     }
 
-    private static Task MoveToRecycleBinAsync(
-        string destFile, string destRoot, int retentionDays)
+    /// <summary>Nom du dossier de corbeille interne, créé à la racine du dossier de destination d'une paire.</summary>
+    public const string RecycleFolderName = ".winback_recycle";
+
+    /// <summary>
+    /// Déplace un fichier supprimé à la source vers la corbeille de sauvegarde,
+    /// dans un sous-dossier daté. <paramref name="destRoot"/> doit être le dossier de
+    /// destination de la paire — c'est aussi celui que <see cref="PurgeRecycleBin"/> purge.
+    /// </summary>
+    private static void MoveToRecycleBin(string destFile, string destRoot)
     {
-        var recyclePath = Path.Combine(destRoot, ".winback_recycle",
+        var recyclePath = Path.Combine(destRoot, RecycleFolderName,
             DateTime.Now.ToString("yyyy-MM-dd"),
             Path.GetRelativePath(destRoot, destFile));
 
         var recycleDir = Path.GetDirectoryName(recyclePath);
         if (recycleDir != null) Directory.CreateDirectory(recycleDir);
         File.Move(destFile, recyclePath, overwrite: true);
-        return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Supprime les sous-dossiers datés de la corbeille plus anciens que la rétention.
+    /// <paramref name="destRoot"/> doit être le même dossier que celui passé à
+    /// <see cref="MoveToRecycleBin"/>, sinon la purge ne trouve rien à supprimer.
+    /// </summary>
     private void PurgeRecycleBin(string destRoot, int retentionDays)
     {
-        var recyclePath = Path.Combine(destRoot, ".winback_recycle");
+        var recyclePath = Path.Combine(destRoot, RecycleFolderName);
         if (!Directory.Exists(recyclePath)) return;
 
-        var cutoff = DateTime.Now.AddDays(-retentionDays);
+        var cutoff = DateTime.Now.Date.AddDays(-retentionDays);
         foreach (var dir in Directory.EnumerateDirectories(recyclePath))
         {
-            if (DateTime.TryParse(Path.GetFileName(dir), out var date) && date < cutoff)
+            if (DateTime.TryParseExact(Path.GetFileName(dir), "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var date)
+                && date < cutoff)
             {
                 try { Directory.Delete(dir, recursive: true); }
                 catch (Exception ex)

@@ -32,6 +32,13 @@ public partial class ProfileEditorWindow : Window
         }
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _vm.PropertyChanged -= OnVmPropertyChanged;
+        _vm.Cleanup();
+        base.OnClosed(e);
+    }
+
     public void InitFromDrive(DriveDetails drive)
     {
         _vm.InitFromDrive(drive);

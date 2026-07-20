@@ -17,6 +17,13 @@ namespace WinBack.Core.Services;
 /// <param name="AutoStart">Démarrage automatique sans confirmation.</param>
 /// <param name="EnableEncryption">Chiffrement AES-256 activé.</param>
 /// <param name="Pairs">Paires source → destination du profil.</param>
+/// <param name="EncryptionSalt">
+/// Sel PBKDF2 (32 octets, base64) du profil, ou <c>null</c>.
+/// Un sel n'est pas un secret : il est déjà écrit en clair sur le disque de sauvegarde
+/// (<c>.winback_kdf.json</c>). L'exporter permet à la machine cible de continuer à
+/// écrire dans la même sauvegarde avec le même mot de passe. Champ optionnel :
+/// les fichiers exportés par les versions ≤ 0.4.7 ne le contiennent pas.
+/// </param>
 public record ProfileExportDto(
     string FormatVersion,
     string Name,
@@ -29,7 +36,8 @@ public record ProfileExportDto(
     bool EnableVss,
     bool AutoStart,
     bool EnableEncryption,
-    List<PairExportDto> Pairs);
+    List<PairExportDto> Pairs,
+    string? EncryptionSalt = null);
 
 /// <summary>
 /// DTO d'une paire source → destination dans un profil exporté.

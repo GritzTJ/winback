@@ -216,8 +216,17 @@ public partial class ProfileCardViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private string _progressText = string.Empty;
     [ObservableProperty] private int _progressPercent;
-    [ObservableProperty] private BackupRunStatus? _lastRunStatus;
-    [ObservableProperty] private DateTime? _lastRunDate;
+
+    // StatusIcon et LastRunText sont calculés : sans ces attributs, la carte resterait
+    // figée sur « Jamais sauvegardé » / « ? » après la fin d'une sauvegarde.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusIcon))]
+    [NotifyPropertyChangedFor(nameof(StatusLabel))]
+    private BackupRunStatus? _lastRunStatus;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LastRunText))]
+    private DateTime? _lastRunDate;
 
     // ── Pause ─────────────────────────────────────────────────────────────────
 
@@ -259,7 +268,21 @@ public partial class ProfileCardViewModel : ObservableObject
         BackupRunStatus.PartialSuccess => "⚠",
         BackupRunStatus.Error          => "✗",
         BackupRunStatus.Cancelled      => "—",
+        BackupRunStatus.Interrupted    => "⏸",
+        BackupRunStatus.Running        => "⋯",
         _                              => "?"
+    };
+
+    /// <summary>Libellé lisible du statut de la dernière exécution (info-bulle).</summary>
+    public string StatusLabel => LastRunStatus switch
+    {
+        BackupRunStatus.Success        => "Sauvegarde réussie",
+        BackupRunStatus.PartialSuccess => "Réussie avec des erreurs",
+        BackupRunStatus.Error          => "Échec de la sauvegarde",
+        BackupRunStatus.Cancelled      => "Annulée",
+        BackupRunStatus.Interrupted    => "Interrompue (disque retiré)",
+        BackupRunStatus.Running        => "En cours",
+        _                              => "Aucune sauvegarde"
     };
 
     /// <summary>Annule la sauvegarde en cours pour ce profil.</summary>

@@ -72,12 +72,19 @@ public static class DriveIdentifier
         try
         {
             var letter = driveLetter.TrimEnd('\\', ':');
-            using var searcher = new ManagementObjectSearcher(
-                $"SELECT * FROM Win32_LogicalDiskToPartition");
+
+            // La lettre est injectée dans une requête WQL : n'accepter qu'un caractère
+            // A–Z pour qu'aucune valeur inattendue ne puisse altérer la requête.
+            if (letter.Length != 1 || !char.IsAsciiLetter(letter[0]))
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[DriveIdentifier] Lettre de lecteur invalide : « {driveLetter} »");
+                return null;
+            }
 
             // Requête en deux étapes : LogicalDisk → Partition → DiskDrive
             using var ldSearcher = new ManagementObjectSearcher(
-                $"SELECT * FROM Win32_LogicalDisk WHERE DeviceID='{letter}:'");
+                $"SELECT * FROM Win32_LogicalDisk WHERE DeviceID='{char.ToUpperInvariant(letter[0])}:'");
 
             foreach (ManagementObject ld in ldSearcher.Get())
             {

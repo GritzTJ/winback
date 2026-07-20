@@ -14,8 +14,8 @@ namespace WinBack.App;
 
 public partial class App : Application
 {
-    private IHost _host = null!;
-    private TaskbarIcon _trayIcon = null!;
+    private IHost? _host;
+    private TaskbarIcon? _trayIcon;
 
     /// <summary>Vrai lorsque l'application est en cours d'arrêt (Shutdown appelé).</summary>
     public static bool IsShuttingDown { get; private set; }
@@ -43,37 +43,39 @@ public partial class App : Application
 
     private async Task InitializeAsync()
     {
-        _host = BuildHost();
+        var host = BuildHost();
+        _host = host;
 
         // Initialiser la base de données AVANT de démarrer le host
-        var dbFactory = _host.Services.GetRequiredService<IDbContextFactory<WinBackContext>>();
+        var dbFactory = host.Services.GetRequiredService<IDbContextFactory<WinBackContext>>();
         await using (var db = await dbFactory.CreateDbContextAsync())
         {
             db.Initialize();
         }
 
         // Récupérer l'icône tray depuis les ressources XAML
-        _trayIcon = (TaskbarIcon)FindResource("TrayIcon");
-        var notifications = _host.Services.GetRequiredService<NotificationService>();
-        notifications.Initialize(_trayIcon);
-        _trayIcon.TrayMouseDoubleClick += (_, _) => ShowDashboard();
-        _trayIcon.TrayBalloonTipClicked += async (_, _) =>
+        var trayIcon = (TaskbarIcon)FindResource("TrayIcon");
+        _trayIcon = trayIcon;
+        var notifications = host.Services.GetRequiredService<NotificationService>();
+        notifications.Initialize(trayIcon);
+        trayIcon.TrayMouseDoubleClick += (_, _) => ShowDashboard();
+        trayIcon.TrayBalloonTipClicked += async (_, _) =>
         {
-            var s = await _host.Services.GetRequiredService<ProfileService>().GetSettingsAsync();
+            var s = await host.Services.GetRequiredService<ProfileService>().GetSettingsAsync();
             if (!s.ClickableNotifications) return;
             Dispatcher.Invoke(() => TrayHistory_Click(this, new RoutedEventArgs()));
         };
 
         // Créer la fenêtre principale et la définir comme MainWindow AVANT de démarrer le host.
         // L'UsbMonitorService (IHostedService) en a besoin pour attacher son hook WM_DEVICECHANGE.
-        _dashboard = GetService<DashboardWindow>();
+        _dashboard = CreateDashboard();
         MainWindow = _dashboard;
 
-        var profileService = _host.Services.GetRequiredService<ProfileService>();
+        var profileService = host.Services.GetRequiredService<ProfileService>();
         var settings = await profileService.GetSettingsAsync();
 
         // Démarrer le host (lance UsbMonitorService.StartAsync qui accroche WM_DEVICECHANGE)
-        await _host.StartAsync();
+        await host.StartAsync();
 
         if (!settings.StartMinimized)
             ShowDashboard();
@@ -81,7 +83,7 @@ public partial class App : Application
             _dashboard.Hide(); // Fenêtre cachée mais HWND existant pour le hook USB
 
         // Abonnement aux événements d'orchestration
-        var orchestrator = _host.Services.GetRequiredService<BackupOrchestrator>();
+        var orchestrator = host.Services.GetRequiredService<BackupOrchestrator>();
         orchestrator.UnknownDriveInserted += OnUnknownDriveInserted;
 
         // Câbler la demande de mot de passe pour les sauvegardes chiffrées :
@@ -89,11 +91,15 @@ public partial class App : Application
         // donc on utilise Dispatcher.Invoke pour afficher la fenêtre sur le thread UI.
         orchestrator.RequestEncryptionKeyAsync = async profile =>
         {
-            // Générer un sel PBKDF2 si le profil n'en a pas encore
-            byte[]? salt = null;
-            if (profile.EncryptionSalt != null)
+            // Générer un sel PBKDF2 si le profil n'en a pas encore.
+            // isFirstUse : aucune sauvegarde chiffrée n'existe encore pour ce profil, donc
+            // aucun mot de passe de référence — on demande une confirmation pour qu'une
+            // faute de frappe ne produise pas une sauvegarde entière indéchiffrable.
+            byte[] salt;
+            bool isFirstUse = profile.EncryptionSalt == null;
+            if (!isFirstUse)
             {
-                salt = Convert.FromBase64String(profile.EncryptionSalt);
+                salt = Convert.FromBase64String(profile.EncryptionSalt!);
             }
             else
             {
@@ -107,7 +113,7 @@ public partial class App : Application
             {
                 var promptWindow = GetService<PasswordPromptWindow>();
                 promptWindow.Owner = GetOrCreateDashboard();
-                promptWindow.InitForProfile(profile.Name, salt);
+                promptWindow.InitForProfile(profile.Name, salt, requireConfirmation: isFirstUse);
                 if (promptWindow.ShowDialog() == true)
                     key = promptWindow.DerivedKey;
             });
@@ -123,12 +129,29 @@ public partial class App : Application
     protected override async void OnExit(ExitEventArgs e)
     {
         IsShuttingDown = true;
-        // Nettoyer le ViewModel du dashboard pour désabonner les événements
-        if (_dashboard?.DataContext is DashboardViewModel vm)
-            vm.Cleanup();
-        _trayIcon.Dispose();
-        await _host.StopAsync(TimeSpan.FromSeconds(5));
-        _host.Dispose();
+
+        // OnExit s'exécute aussi quand InitializeAsync a échoué (Shutdown(1)) :
+        // _trayIcon et _host peuvent être null. Une NullReferenceException ici
+        // masquerait l'erreur de démarrage réelle déjà affichée à l'utilisateur.
+        try
+        {
+            // Nettoyer le ViewModel du dashboard pour désabonner les événements
+            if (_dashboard?.DataContext is DashboardViewModel vm)
+                vm.Cleanup();
+
+            _trayIcon?.Dispose();
+
+            if (_host is not null)
+            {
+                await _host.StopAsync(TimeSpan.FromSeconds(5));
+                _host.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[App] Erreur pendant l'arrêt : {ex}");
+        }
+
         base.OnExit(e);
     }
 
@@ -199,9 +222,20 @@ public partial class App : Application
             return _dashboard;
 
         _dashboardClosedPermanently = false;
-        _dashboard = GetService<DashboardWindow>();
-        _dashboard.Closed += (_, _) => _dashboardClosedPermanently = true;
+        _dashboard = CreateDashboard();
         return _dashboard;
+    }
+
+    /// <summary>
+    /// Crée une fenêtre dashboard et l'instrumente pour détecter sa fermeture définitive.
+    /// Toute création doit passer par ici : sans le handler <c>Closed</c>, une fenêtre
+    /// fermée serait réutilisée et <c>Show()</c> lèverait une InvalidOperationException.
+    /// </summary>
+    private DashboardWindow CreateDashboard()
+    {
+        var win = GetService<DashboardWindow>();
+        win.Closed += (_, _) => _dashboardClosedPermanently = true;
+        return win;
     }
 
     // ── Événements tray ───────────────────────────────────────────────────────
@@ -241,11 +275,19 @@ public partial class App : Application
             if (result == MessageBoxResult.Yes)
             {
                 ShowDashboard();
+                var dashboard = GetOrCreateDashboard();
                 var win = GetService<ProfileEditorWindow>();
-                win.Owner = GetOrCreateDashboard();
+                win.Owner = dashboard;
                 win.InitFromDrive(e.Drive);
                 if (win.ShowDialog() == true)
-                    _ = GetService<DashboardViewModel>().LoadCommand.ExecuteAsync(null);
+                {
+                    // Recharger le ViewModel de la fenêtre affichée. DashboardViewModel est
+                    // enregistré en Transient : GetService<DashboardViewModel>() créerait une
+                    // instance neuve, sans effet sur l'UI, qui s'abonnerait en plus aux
+                    // événements de l'orchestrateur sans jamais être libérée.
+                    if (dashboard.DataContext is DashboardViewModel vm)
+                        _ = vm.LoadCommand.ExecuteAsync(null);
+                }
             }
         });
     }
@@ -263,7 +305,7 @@ public partial class App : Application
         if (result == MessageBoxResult.Yes)
         {
             var orchestrator = GetService<BackupOrchestrator>();
-            var logger = _host.Services.GetRequiredService<ILogger<App>>();
+            var logger = GetService<ILogger<App>>();
             _ = Task.Run(async () =>
             {
                 try { await orchestrator.StartBackupAsync(profile, drive); }
@@ -274,6 +316,10 @@ public partial class App : Application
 
     // ── Helper DI ─────────────────────────────────────────────────────────────
 
-    public static T GetService<T>() where T : notnull =>
-        ((App)Current)._host.Services.GetRequiredService<T>();
+    public static T GetService<T>() where T : notnull
+    {
+        var host = ((App)Current)._host
+            ?? throw new InvalidOperationException("Le conteneur DI n'est pas initialisé.");
+        return host.Services.GetRequiredService<T>();
+    }
 }

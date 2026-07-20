@@ -15,7 +15,7 @@ public class FileSnapshot
     public long Size { get; set; }
     public DateTime LastModified { get; set; }
 
-    /// <summary>Hash MD5 du fichier (optionnel, calculé si EnableHashVerification = true).</summary>
+    /// <summary>Hash SHA-256 du fichier (optionnel, calculé si EnableHashVerification = true).</summary>
     public string? Hash { get; set; }
 
     public BackupProfile Profile { get; set; } = null!;

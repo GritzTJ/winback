@@ -81,8 +81,14 @@ public class ProfileService
         existing.EnableHashVerification = profile.EnableHashVerification;
         existing.EnableEncryption = profile.EnableEncryption;
         existing.InsertionDelaySeconds = profile.InsertionDelaySeconds;
-        existing.EncryptionSalt = profile.EncryptionSalt;
         existing.IsActive = profile.IsActive;
+
+        // Le sel PBKDF2 ne doit JAMAIS être écrasé par null : il est la seule façon de
+        // redériver la clé des fichiers déjà chiffrés sur le disque de sauvegarde. Un
+        // appelant qui reconstruit un BackupProfile partiel (éditeur de profil) ne le
+        // connaît pas — le perdre rendrait toutes les sauvegardes chiffrées illisibles.
+        if (profile.EncryptionSalt != null)
+            existing.EncryptionSalt = profile.EncryptionSalt;
 
         // Gérer les paires : supprimer, mettre à jour, ajouter
         var incomingIds = profile.Pairs.Where(p => p.Id > 0).Select(p => p.Id).ToHashSet();
@@ -205,7 +211,14 @@ public class ProfileService
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         settings.Id = 1;
-        db.Settings.Update(settings);
+
+        // Update() suppose que la ligne existe : si la base a été créée sans le seed
+        // (ou si la ligne 1 a été supprimée), il faut l'insérer au lieu de la modifier.
+        if (await db.Settings.AnyAsync(s => s.Id == 1))
+            db.Settings.Update(settings);
+        else
+            db.Settings.Add(settings);
+
         await db.SaveChangesAsync();
     }
 
@@ -252,7 +265,8 @@ public class ProfileService
                 SourcePath: p.SourcePath,
                 DestRelativePath: p.DestRelativePath,
                 ExcludePatternsJson: p.ExcludePatternsJson,
-                IsActive: p.IsActive)).ToList());
+                IsActive: p.IsActive)).ToList(),
+            EncryptionSalt: profile.EncryptionSalt);
 
         return JsonSerializer.Serialize(dto, _jsonExportOptions);
     }
@@ -299,6 +313,16 @@ public class ProfileService
         if (dto.Pairs.Count > 100)
             throw new InvalidDataException($"Trop de paires source/destination : {dto.Pairs.Count} (max 100).");
 
+        // Le sel doit être un base64 valide de 32 octets, sinon la dérivation de clé
+        // échouerait silencieusement à la première sauvegarde chiffrée.
+        string? importedSalt = null;
+        if (!string.IsNullOrWhiteSpace(dto.EncryptionSalt))
+        {
+            if (!Convert.TryFromBase64String(dto.EncryptionSalt, new byte[64], out var saltLen) || saltLen != 32)
+                throw new InvalidDataException("Sel de chiffrement invalide (32 octets en base64 attendus).");
+            importedSalt = dto.EncryptionSalt;
+        }
+
         foreach (var p in dto.Pairs)
         {
             if (string.IsNullOrWhiteSpace(p.SourcePath))
@@ -327,6 +351,7 @@ public class ProfileService
             EnableVss      = dto.EnableVss,
             AutoStart      = dto.AutoStart,
             EnableEncryption = dto.EnableEncryption,
+            EncryptionSalt   = importedSalt,
             Pairs = dto.Pairs.Select(p => new BackupPair
             {
                 SourcePath         = p.SourcePath.Trim(),

@@ -69,10 +69,13 @@ public class RestoreEngine
                 $"Dossier source introuvable : {options.SourceFolder}");
 
         // Énumérer récursivement tous les fichiers à restaurer.
-        // On exclut le sous-dossier de corbeille interne (.winback_recycle).
+        // On exclut les artefacts internes WinBack : le dossier de corbeille
+        // (.winback_recycle) et le fichier de métadonnées KDF (.winback_kdf.json),
+        // qui n'ont aucun sens dans le dossier restauré par l'utilisateur.
         var files = Directory
             .EnumerateFiles(options.SourceFolder, "*", SearchOption.AllDirectories)
-            .Where(f => !f.Contains(Path.DirectorySeparatorChar + ".winback_recycle" + Path.DirectorySeparatorChar))
+            .Where(f => !f.Contains(Path.DirectorySeparatorChar + BackupEngine.RecycleFolderName + Path.DirectorySeparatorChar)
+                     && !string.Equals(Path.GetFileName(f), KdfMetadataFileName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         // Restauration sélective : filtrer selon les chemins sélectionnés par l'utilisateur.
@@ -207,11 +210,17 @@ public class RestoreEngine
             encryptedSource, FileMode.Open, FileAccess.Read,
             FileShare.Read, 1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        // Lire les 4 premiers octets pour détecter la version du format
+        // Lire les 4 premiers octets pour détecter la version du format.
+        // ReadExactlyAsync (et non ReadAsync) : un FileStream peut légitimement
+        // retourner moins d'octets que demandé, ce qui ne signifie pas que le
+        // fichier est tronqué.
         var magic = new byte[4];
-        if (await src.ReadAsync(magic, ct) != 4)
+        try { await src.ReadExactlyAsync(magic, ct); }
+        catch (EndOfStreamException)
+        {
             throw new InvalidDataException(
                 $"Fichier chiffré invalide (trop court) : {Path.GetFileName(encryptedSource)}");
+        }
 
         bool isV2 = magic[0] == (byte)'W' && magic[1] == (byte)'B'
                   && magic[2] == (byte)'0' && magic[3] == (byte)'2';
@@ -222,9 +231,12 @@ public class RestoreEngine
         {
             // ── Format v2 : vérification HMAC puis déchiffrement ──────────────
             iv = new byte[16];
-            if (await src.ReadAsync(iv, ct) != 16)
+            try { await src.ReadExactlyAsync(iv, ct); }
+            catch (EndOfStreamException)
+            {
                 throw new InvalidDataException(
                     $"Fichier chiffré invalide (IV incomplet) : {Path.GetFileName(encryptedSource)}");
+            }
 
             // HMAC est sur les 32 derniers octets du fichier
             var fileLen = src.Length;
@@ -244,16 +256,21 @@ public class RestoreEngine
             {
                 var toRead = (int)Math.Min(remaining, buffer.Length);
                 var read = await src.ReadAsync(buffer.AsMemory(0, toRead), ct);
-                if (read == 0) break;
+                if (read == 0)
+                    throw new InvalidDataException(
+                        $"Fichier chiffré invalide (lecture tronquée) : {Path.GetFileName(encryptedSource)}");
                 hmac.AppendData(buffer, 0, read);
                 remaining -= read;
             }
             var computed = hmac.GetHashAndReset();
 
             var stored = new byte[32];
-            if (await src.ReadAsync(stored, ct) != 32)
+            try { await src.ReadExactlyAsync(stored, ct); }
+            catch (EndOfStreamException)
+            {
                 throw new InvalidDataException(
                     $"Fichier chiffré invalide (HMAC manquant) : {Path.GetFileName(encryptedSource)}");
+            }
 
             if (!CryptographicOperations.FixedTimeEquals(computed, stored))
                 throw new InvalidDataException(
@@ -289,9 +306,12 @@ public class RestoreEngine
             // Les 4 octets lus comme magic sont en réalité le début de l'IV
             iv = new byte[16];
             Array.Copy(magic, iv, 4);
-            if (await src.ReadAsync(iv.AsMemory(4), ct) != 12)
+            try { await src.ReadExactlyAsync(iv.AsMemory(4), ct); }
+            catch (EndOfStreamException)
+            {
                 throw new InvalidDataException(
                     $"Fichier chiffré invalide (IV incomplet) : {Path.GetFileName(encryptedSource)}");
+            }
 
             using var aes = Aes.Create();
             aes.Key = key;

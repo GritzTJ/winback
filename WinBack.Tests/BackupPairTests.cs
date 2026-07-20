@@ -83,6 +83,41 @@ public class BackupPairTests
         Assert.False(pair.IsExcluded("other_modules/file.js"));
     }
 
+    // ── MatchesGlob : séparateurs de chemin ────────────────────────────────
+    //
+    // Les tests ci-dessus comparaient un pattern en '/' à un chemin en '/', ce qui
+    // ne se produit jamais en production : Path.GetRelativePath renvoie des '\' sous
+    // Windows. Les cas réels sont donc mixtes.
+
+    [Fact]
+    public void IsExcluded_SlashPattern_MatchesBackslashPath()
+    {
+        var pair = MakePair("node_modules/**");
+        Assert.True(pair.IsExcluded(@"node_modules\lodash\index.js"));
+    }
+
+    [Fact]
+    public void IsExcluded_BackslashPattern_MatchesSlashPath()
+    {
+        var pair = MakePair(@"node_modules\**");
+        Assert.True(pair.IsExcluded("node_modules/lodash/index.js"));
+    }
+
+    [Fact]
+    public void IsExcluded_SlashPattern_DoesNotMatchSiblingWithBackslashPath()
+    {
+        var pair = MakePair("node_modules/**");
+        Assert.False(pair.IsExcluded(@"other_modules\file.js"));
+    }
+
+    [Fact]
+    public void IsExcluded_NestedSlashPattern_MatchesBackslashPath()
+    {
+        var pair = MakePair("src/obj/**");
+        Assert.True(pair.IsExcluded(@"src\obj\Debug\app.dll"));
+        Assert.False(pair.IsExcluded(@"src\bin\Debug\app.dll"));
+    }
+
     // ── MatchesGlob : insensibilité à la casse ─────────────────────────────
 
     [Fact]

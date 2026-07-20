@@ -69,6 +69,21 @@ public class BackupPair
         return false;
     }
 
+    /// <summary>
+    /// Normalise un caractère pour la comparaison de glob : séparateurs de chemin
+    /// unifiés et casse ignorée.
+    /// <para>
+    /// Les patterns sont saisis indifféremment avec <c>/</c> (style Unix, celui des
+    /// .gitignore dont les utilisateurs s'inspirent) ou <c>\</c>, alors que les chemins
+    /// relatifs calculés par <see cref="Path.GetRelativePath"/> utilisent <c>\</c> sous
+    /// Windows. Sans cette unification, un pattern aussi courant que
+    /// <c>node_modules/**</c> ne correspondrait jamais à <c>node_modules\lodash\index.js</c>
+    /// et l'exclusion serait silencieusement sans effet.
+    /// </para>
+    /// </summary>
+    private static char NormalizeGlobChar(char c)
+        => c == '/' ? '\\' : char.ToLowerInvariant(c);
+
     internal static bool MatchesGlob(string text, string pattern)
     {
         // Conversion simple glob → regex via itération
@@ -78,12 +93,14 @@ public class BackupPair
 
         while (ti < t.Length)
         {
-            if (pi < p.Length && (p[pi] == '?' || char.ToLowerInvariant(p[pi]) == char.ToLowerInvariant(t[ti])))
+            if (pi < p.Length && (p[pi] == '?' || NormalizeGlobChar(p[pi]) == NormalizeGlobChar(t[ti])))
             {
                 pi++; ti++;
             }
             else if (pi < p.Length && p[pi] == '*')
             {
+                // '*' couvre n'importe quelle séquence, séparateurs compris : '**' est
+                // donc géré naturellement par le retour arrière ci-dessous.
                 starPi = pi++; starTi = ti;
             }
             else if (starPi != -1)

@@ -6,8 +6,9 @@
     1. Crée les icônes placeholder si elles n'existent pas
     2. Restaure les packages NuGet
     3. Compile en Release x64
-    4. Publie un exécutable autonome dans ./publish/
-    5. (optionnel) Compile l'installateur Inno Setup dans ./installer/output/
+    4. Exécute les tests (sauf -SkipTests)
+    5. Publie un exécutable autonome dans ./publish/
+    6. (optionnel) Compile l'installateur Inno Setup dans ./installer/output/
 
 .EXAMPLE
     .\build.ps1
@@ -15,12 +16,14 @@
     .\build.ps1 -Clean            # Nettoie avant de compiler
     .\build.ps1 -Installer        # Génère aussi le setup .exe (force -SelfContained)
     .\build.ps1 -Installer -Clean # Nettoyage complet + installateur
+    .\build.ps1 -SkipTests        # Itération rapide : ne lance pas les tests
 #>
 
 param(
     [switch]$SelfContained,
     [switch]$Clean,
-    [switch]$Installer
+    [switch]$Installer,
+    [switch]$SkipTests
 )
 
 Set-StrictMode -Version Latest
@@ -68,7 +71,18 @@ Write-Host "`n→ Compilation Release x64…" -ForegroundColor Yellow
 dotnet build "$root\WinBack.sln" -c Release --nologo /v:m
 if ($LASTEXITCODE -ne 0) { throw "Compilation échouée" }
 
-# ── 4. Publication ────────────────────────────────────────────────────────────
+# ── 4. Tests ──────────────────────────────────────────────────────────────────
+# Placés avant la publication : un test rouge doit empêcher la génération de
+# l'installeur, et donc la publication d'une release.
+if ($SkipTests) {
+    Write-Host "`n→ Tests ignorés (-SkipTests)" -ForegroundColor DarkYellow
+} else {
+    Write-Host "`n→ Exécution des tests…" -ForegroundColor Yellow
+    dotnet test "$root\WinBack.sln" -c Release --no-build --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Tests échoués" }
+}
+
+# ── 5. Publication ────────────────────────────────────────────────────────────
 Write-Host "`n→ Publication…" -ForegroundColor Yellow
 
 $publishArgs = @(
@@ -107,7 +121,7 @@ if (Test-Path $exePath) {
     throw "Exécutable introuvable dans $publish"
 }
 
-# ── 5. Installateur Inno Setup (optionnel) ────────────────────────────────────
+# ── 6. Installateur Inno Setup (optionnel) ────────────────────────────────────
 if ($Installer) {
     Write-Host "`n→ Compilation de l'installateur…" -ForegroundColor Yellow
 
